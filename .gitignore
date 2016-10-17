@@ -84,4 +84,8 @@ Mkfile.old
 dkms.conf
 /.vscode
 /Build
-/VS Build/KantiEngine
+/VS Build
+/.vs
+/Data/Images
+/Data/Music
+/Data/Sounds
