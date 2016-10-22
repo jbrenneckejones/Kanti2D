@@ -16,18 +16,32 @@ public:
 
 	inline void GameLoop()
 	{
-		Graphics RenderGraphics;
+		// GameEventSystem::EventSystem = new GameEventSystem();
+		RenderManager::CurrentRenderer->CreateWindow(Vector2(640, 480), "CaveStory");
 		Input GameInput;
 		Audio GameAudio;
 		SDL_Event Event;
 
-		Player = GameObject(RenderGraphics, Vector2(280, 252));
-		Player.Speed = 0.2f;
+		Level* GameLevel; 
+		Player* Character;
+
+		GameUpdateManager::Instance = new GameUpdateManager();
+
+		// CurrentPlayerScript = Player(Vector2(280, 252));
+		GameEntity CurrentPlayer = GameEntity();
+		Character = CurrentPlayer.AddComponent<Player>(new Player(&CurrentPlayer, Vector2(280, 252)));
 
 		// GameLevel = Level("Map 1", Vector2(100, 100), RenderGraphics);
-		GameLevel = Level("../Data/Levels/PrtCave.json", RenderGraphics);
+		
+		GameEntity LevelEntity = GameEntity();
+		GameLevel = new Level(&LevelEntity, "../Data/Levels/PrtCave.json");
+		LevelEntity.AddComponent<Level>(GameLevel);
 
 		Time::Initialize();
+
+		ThreadManager::Instance = new ThreadManager();
+
+		GameEventSystem::EventSystem->CreateCollisionCells(KRectangle(0, 0, 640, 480));
 
 		while (true)
 		{
@@ -64,54 +78,32 @@ public:
 
 			if (GameInput.IsKeyHeld(SDL_SCANCODE_LEFT))
 			{
-				Player.Move(DIRECTION::LEFT);
+				Character->Move(DIRECTION::LEFT);
 			}
 			else if (GameInput.IsKeyHeld(SDL_SCANCODE_RIGHT))
 			{
-				Player.Move(DIRECTION::RIGHT);
+				Character->Move(DIRECTION::RIGHT);
 			}
 
 			if (!GameInput.IsKeyHeld(SDL_SCANCODE_LEFT) && !GameInput.IsKeyHeld(SDL_SCANCODE_RIGHT))
 			{
-				Player.StopMove();
+				Character->StopMove();
 			}
 
+			Vector2 Position = Character->EntityAttachedTo->EntTransform.Position;
+
+			// Notify threads to update
+
+			GameUpdateManager::Instance->OnGameUpdate();
+			
+			ThreadManager::Instance->Update();
+			
+			uint32 DelayAmount = (uint32)(Time::CurrentFPS / Time::FPS);
+			SDL_Delay(DelayAmount);
+
 			Time::Update();
-
-			Update(Time::UpdateTime);
-
-			Draw(RenderGraphics);
 		}
 	}
-
-	inline void Draw(Graphics &RenderGraphics)
-	{
-		RenderGraphics.Clear();
-
-		GameLevel.Draw(RenderGraphics);
-
-		Player.Draw(RenderGraphics);
-
-		RenderGraphics.Draw();
-	}
-
-	inline void Update(uint32 ElapsedTime)
-	{
-		Player.Update(ElapsedTime);
-		GameLevel.Update(ElapsedTime);
-
-		std::vector<Rectangle> Collisions = GameLevel.CheckTileCollisions(Player.ObjectSprite->BoundingBox);
-
-		if (Collisions.size() > 0)
-		{
-			Player.HandleTileCollisions(Collisions);
-		}
-	}
-
-
-	GameObject Player;
-
-	Level GameLevel;
 
 };
 

@@ -285,6 +285,16 @@ ClampAboveZero(real32 Value)
 }
 
 inline real32
+ClampAnyAboveZero(real32 Value)
+{
+	real32 Sign = SignOf(Value);
+	real32 Result = (AbsoluteValue(Value) < 0) ? 0.0f : AbsoluteValue(Value);
+	Result = Result * Sign;
+
+	return(Result);
+}
+
+inline real32
 SafeRatioN(real32 Numerator, real32 Divisor, real32 N)
 {
 	real32 Result = N;
@@ -341,6 +351,8 @@ public:
 
 		real32 E[2];
 	};
+
+	const k_internal Vector2 Zero;
 
 	inline Vector2()
 	{
@@ -408,7 +420,9 @@ public:
 
 	inline Vector2 operator+(Vector2 A)
 	{
-		Vector2 Result = { this->X + A.X, this->Y + A.Y };
+		Vector2 Result = {};
+
+		Result = { this->X + A.X, this->Y + A.Y };
 
 		return(Result);
 	}
@@ -430,6 +444,18 @@ public:
 	{
 		this->X -= A.X;
 		this->Y -= A.Y;
+	}
+
+	inline bool32 operator==(Vector2 A)
+	{
+		bool32 Result = X == A.X && Y == A.Y;
+
+		return (Result);
+	}
+
+	inline bool32 operator <(Vector2 A)
+	{
+		return X < A.X && Y < A.Y;
 	}
 
 	inline Vector2 operator/(real32 A)
@@ -525,6 +551,8 @@ public:
 		return(Result);
 	}
 };
+
+const Vector2 Vector2::Zero = Vector2(0.0f, 0.0f);
 
 #define KANTI2D_MATH
 

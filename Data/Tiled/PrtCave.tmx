@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<map version="1.0" orientation="orthogonal" renderorder="right-down" width="20" height="16" tilewidth="32" tileheight="32" nextobjectid="21">
+<map version="1.0" orientation="orthogonal" renderorder="right-down" width="20" height="16" tilewidth="32" tileheight="32" nextobjectid="45">
  <tileset firstgid="1" name="PrtCave" tilewidth="32" tileheight="32" tilecount="80" columns="16">
   <image source="../Images/Stage/PrtCave.bmp" width="512" height="160"/>
  </tileset>
@@ -541,7 +541,7 @@
    <tile gid="65"/>
    <tile gid="66"/>
    <tile gid="0"/>
-   <tile gid="53"/>
+   <tile gid="35"/>
    <tile gid="0"/>
    <tile gid="0"/>
    <tile gid="0"/>
@@ -655,8 +655,33 @@
   <object id="5" x="224" y="160" width="160.5" height="31.5"/>
   <object id="10" x="257" y="287" width="95" height="31"/>
   <object id="16" x="128" y="33" width="29" height="319"/>
-  <object id="17" x="127" y="354" width="419" height="31"/>
+  <object id="17" x="128" y="384" width="386" height="31"/>
   <object id="18" x="479" y="32" width="32" height="315"/>
-  <object id="19" x="159" y="34" width="317" height="29"/>
+  <object id="19" x="162" y="34" width="312" height="29"/>
+  <object id="21" x="207" y="258" width="19" height="91"/>
+  <object id="28" x="161" y="66" width="64" height="37"/>
+  <object id="29" x="161" y="107" width="50" height="10"/>
+  <object id="31" x="161" y="243" width="42" height="64"/>
+  <object id="32" x="348" y="67" width="34" height="65"/>
+  <object id="33" x="288" y="129" width="31" height="27"/>
+  <object id="34" x="384" y="288" width="32" height="30"/>
+  <object id="35" x="417" y="257" width="31" height="28"/>
+  <object id="36" x="450" y="258" width="25" height="26"/>
+  <object id="38" x="388" y="178" width="88" height="16"/>
+  <object id="39" x="412" y="322" width="10" height="58"/>
+ </objectgroup>
+ <objectgroup name="Slopes">
+  <object id="40" x="226" y="349">
+   <polyline points="0,0 67,33"/>
+  </object>
+  <object id="41" x="354" y="381">
+   <polyline points="0,0 56,-34"/>
+  </object>
+  <object id="42" x="320" y="127">
+   <polyline points="0,0 27,-11"/>
+  </object>
+  <object id="43" x="157" y="222">
+   <polyline points="0,0 69,35"/>
+  </object>
  </objectgroup>
 </map>

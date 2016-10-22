@@ -25,6 +25,9 @@ typedef size_t memory_index;
 typedef intptr_t intptr;
 typedef uintptr_t uintptr;
 
+#define TRUE 1
+#define FALSE 0
+
 class Vector2;
 
 // class Vector3;
