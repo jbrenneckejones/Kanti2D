@@ -186,10 +186,24 @@ Max(real32 X, real32 Y)
 	return (Result);
 }
 
+global_variable real32 const DEGREES_CONSTANT = Pi32 / 180.0f;
+
 inline real32
 ToRadians(real32 Degrees)
 {
-	return (Degrees * 0.01745329251994329576923690768489f);
+	real32 Result = Degrees * DEGREES_CONSTANT;
+
+	return (Result);
+}
+
+global_variable real32 const RADIANS_CONSTANT = 180.0f / Pi32;
+
+inline real32
+ToDegrees(real32 Radians)
+{
+	real32 Result = Radians * RADIANS_CONSTANT;
+
+	return (Result);
 }
 
 // Math
@@ -331,6 +345,13 @@ Min(uint32 X, uint32 Y)
 	return (Result);
 }
 
+k_internal bool32
+IsFloatEqual(real32 A, real32 B, real32 Threshold = 1.0f / 8192.0f)
+{	
+	return fabsf(A - B) < Threshold; 
+}
+
+
 // Vector 2
 
 class Vector2
@@ -398,6 +419,13 @@ public:
 		return (Result);
 	}
 
+	inline Vector2 operator*(const Vector2& A) const
+	{
+		Vector2 Result = { this->X * A.X, this->Y * A.Y };
+
+		return (Result);
+	}
+
 	inline friend Vector2 operator*(real32 A, Vector2 B)
 	{
 		Vector2 Result = { A * B.X, A * B.Y };
@@ -453,9 +481,35 @@ public:
 		return (Result);
 	}
 
+	inline bool32 operator==(const Vector2& A) const
+	{
+		bool32 Result = X == A.X && Y == A.Y;
+
+		return (Result);
+	}
+
+	inline bool32 operator!=(Vector2 A)
+	{
+		bool32 Result = !(*this == A);
+
+		return (Result);
+	}
+
+	inline bool32 operator!=(const Vector2& A) const
+	{
+		bool32 Result = !(*this == A);
+
+		return (Result);
+	}
+
 	inline bool32 operator <(Vector2 A)
 	{
 		return X < A.X && Y < A.Y;
+	}
+
+	inline bool32 operator >(Vector2 A)
+	{
+		return X > A.X && Y > A.Y;
 	}
 
 	inline Vector2 operator/(real32 A)
@@ -532,7 +586,17 @@ public:
 
 	k_internal inline Vector2 Normalize(Vector2 A)
 	{
-		Vector2 Result = A / Length(A);
+		// Vector2 Result = A / Length(A);
+		Vector2 Result = A;
+
+		real32 Length = Result.X * Result.X + Result.Y * Result.Y;
+		if (Length > 0.0f)
+		{
+			Length = SquareRoot(Length);
+			real32 InverseLength = 1.0 / Length;
+			Result.X *= InverseLength;
+			Result.Y *= InverseLength;
+		}
 
 		return(Result);
 	}
@@ -550,9 +614,178 @@ public:
 
 		return(Result);
 	}
+
+	k_internal inline real32 Distance(Vector2 A, Vector2 B)
+	{
+		real32 Result = SquareRoot(Square(A.X - B.X) + Square(A.Y - B.Y));
+
+		return (Result);
+	}
+
+	inline real32 Distance(Vector2 A)
+	{
+		real32 Result = Distance(*this, A);
+
+		return (Result);
+	}
+
+	inline k_internal Vector2 Min(Vector2 A, Vector2 B)
+	{
+		return A.Length() < B.Length() ? A : B;
+	}
+
+	inline k_internal Vector2 Max(Vector2 A, Vector2 B)
+	{
+		return A.Length() > B.Length() ? A : B;
+	}
+
+	inline k_internal real32 DotProduct(Vector2 A, Vector2 B)
+	{
+		real32 Result = A.X * B.X + A.Y * B.Y;
+
+		return (Result);
+	}
+
+	inline k_internal Vector2 RotateVector(Vector2 A, real32 Degrees)
+	{
+		real32 Radians = ToRadians(Degrees);
+		real32 Sine = Sin(Radians);
+		real32 Cosine = Cos(Radians);
+
+		Vector2 Result;
+		Result.X = A.X * Cosine - A.Y * Sine;
+		Result.Y = A.X * Sine + A.Y * Cosine;
+
+		return (Result);
+	}
+
+	inline k_internal Vector2 Rotate90Degrees(Vector2 A)
+	{
+		Vector2 Result;
+
+		Result.X = -A.Y;
+		Result.Y = A.X;
+
+		return (Result);
+	}
+
+	inline k_internal Vector2 UnitVector(Vector2 A) 
+	{ 
+		real32 Length = A.Length();
+		Vector2 Result = A;
+
+		if (0.0f < Length)
+		{
+			return Result / Length;
+		}
+
+		return (Result);
+	}
+
+	inline k_internal bool32 IsVectorParallel(Vector2 A, Vector2 B)
+	{
+		Vector2 na = Rotate90Degrees(A);
+
+		return IsFloatEqual(0.0f, DotProduct(na, B));
+	}
+
+	inline k_internal real32 Angle(Vector2 A, Vector2 B)
+	{
+		return ATan2(B.Y, B.X) - ATan2(A.Y, A.X);
+
+		real32 Dot = DotProduct(A, B);						// # dot product
+		real32 Determinant = A.X * B.Y - A.Y * B.X;		   // # determinant
+		real32 Result = ATan2(Determinant, Dot);		   // # atan2(y, x) or atan2(sin, cos)
+
+		return (Result);
+	}
+
+	inline k_internal real32 EnclosedAngle(Vector2 A, Vector2 B)
+	{
+		 Vector2 UnitA = Vector2::UnitVector(A);
+		 Vector2 UnitB = Vector2::UnitVector(B);
+
+		 real32 DotProduct = Vector2::DotProduct(UnitA, UnitB);
+
+		 real32 Result = ToDegrees(ACos(DotProduct));
+
+		 return (Result);
+	}
 };
 
 const Vector2 Vector2::Zero = Vector2(0.0f, 0.0f);
+
+// Unique ID
+
+
+
+struct UniqueID
+{
+	uint64  Data1;
+	uint32	Data2;
+	uint32	Data3;
+	uint8	Data4[8];
+
+	inline bool32 operator ==(const UniqueID& Comparer)
+	{
+		return  Data1 == Comparer.Data1 &&
+			Data2 == Comparer.Data2 &&
+			Data3 == Comparer.Data3 &&
+			Data4 == Comparer.Data4;
+	}
+
+	inline bool32 operator ==(const UniqueID& Comparer) const
+	{
+		return  Data1 == Comparer.Data1 &&
+			Data2 == Comparer.Data2 &&
+			Data3 == Comparer.Data3 &&
+			Data4 == Comparer.Data4;
+	}
+
+	inline bool32 operator ==(UniqueID& Comparer)
+	{
+		return  Data1 == Comparer.Data1 &&
+			Data2 == Comparer.Data2 &&
+			Data3 == Comparer.Data3 &&
+			Data4 == Comparer.Data4;
+	}
+
+	inline bool operator <(const UniqueID& Comparer) const
+	{
+		
+		bool Result = memcmp(this, &Comparer, sizeof(Comparer)) < 0;
+
+		return (Result);
+	}
+
+	/*
+	inline bool32 operator <(const UniqueID& Comparer) const
+	{
+		return  Data1 < Comparer.Data1 &&
+			Data2 < Comparer.Data2 &&
+			Data3 < Comparer.Data3 &&
+			Data4 < Comparer.Data4;
+	}
+	*/
+
+
+	inline bool32 operator <(UniqueID& Comparer)
+	{
+		bool Result = memcmp(this, &Comparer, sizeof(Comparer)) < 0;
+
+		return (Result);
+	}
+
+	inline string ToString()
+	{
+		return std::to_string(Data1) + "-" + std::to_string(Data2) + "-" + std::to_string(Data3);
+	}
+};
+
+#define PLATFORM_GET_UUID(name) UniqueID name()
+typedef PLATFORM_GET_UUID(platform_get_uuid);
+
+global_variable platform_get_uuid* GetUUID;
 
 #define KANTI2D_MATH
 

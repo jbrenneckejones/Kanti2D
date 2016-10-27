@@ -32,16 +32,18 @@ typedef std::string string;
 #include "Kanti2DInput.h"
 
 #include "Kanti2DRectangle.h"
+#include "Kanti2DRectangle.cpp"
 #include "Kanti2DAudio.h"
-#include "Kanti2DRenderManager.h"
-#include "Kanti2DGameEventSystem.h"
 
 #include "External/json.hpp"
 #include "Kanti2DGameObject.h"
-#include "Kanti2DGameObject.cpp"
+
+#include "Kanti2DRenderManager.h"
+#include "Kanti2DGameEventSystem.h"
 
 #include "Kanti2DThreadManager.h"
 
+#include "Kanti2DGameObject.cpp"
 #include "Kanti2DGameEventSystem.cpp"
 
 #include "Kanti2DGame.h"

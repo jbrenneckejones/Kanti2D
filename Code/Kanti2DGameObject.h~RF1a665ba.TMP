@@ -5,14 +5,14 @@ struct ContactPoint
 	// Normal of the contact point.
 	Vector2 Normal;
 
+	// The other collider in contact at the point.
+	class Collider* OtherCollider;
+
 	// The point of contact.
 	Vector2 Point;
 
 	// The first collider in contact at the point.
 	class Collider* ThisCollider;
-
-	// The other collider in contact at the point.
-	class Collider* OtherCollider;
 };
 
 struct Collision
@@ -32,12 +32,9 @@ struct Collision
 	// The relative linear velocity of the two colliding objects.
 	Vector2 RelativeVelocity;
 
-	inline Collision() {};
+	Collision(class Collider& CalledOnCollider, class Collider& IncomingCollider);
 
-	Collision(class Collider* CalledOnCollider, class Collider* IncomingCollider);
 
-	// Assumes that they're already confirmed colliding
-	k_internal inline void GetCollisionInfo(class Collider* Caller, class Collider* Collided, struct Collision& Info);
 };
 
 class Entity
@@ -377,6 +374,12 @@ public:
 	}
 
 	// Whether the collider is touching this collider or not.
+	inline virtual bool32 IsTouching(Collider& Collided)
+	{
+		return GetBounds().Intersects(Collided.GetBounds());
+	}
+
+	// Whether the collider is touching this collider or not.
 	inline virtual bool32 IsTouching(Collider* Collided)
 	{
 		return GetBounds().Intersects(Collided->GetBounds());
@@ -394,120 +397,12 @@ public:
 		return TRUE;
 	}
 
-	inline virtual BoundingBox GetBounds();
+	inline BoundingBox GetBounds();
 
 	bool operator == (const Collider& Other)
 	{
 		return InstanceID == Other.InstanceID;
 	}
-
-	k_internal bool32 line_oriented_rectangle_collide(Ray Line, BoundingBox r)
-	{
-		KRectangle lr;
-		lr.Position.X = 0;
-		lr.Position.Y = 0;
-		lr.Size = r.Extents * 2;
-
-		Ray ll;
-		ll.Origin = Line.Origin - r.Center;
-		ll.Origin = Vector2::RotateVector(ll.Origin, -r.Rotation); // -r.rotation);
-		ll.Origin = ll.Origin + r.Extents;
-		ll.Direction = Vector2::RotateVector(Line.Direction, -r.Rotation); // -r.rotation);
-		return line_rectangle_collide(ll, lr);
-	}
-
-	k_internal bool32 line_rectangle_collide(Ray Line, KRectangle Rect)
-	{
-		Vector2 n = Vector2::Rotate90Degrees(Line.Direction);
-		real32 dp1, dp2, dp3, dp4;
-		Vector2 c1 = Rect.Position;
-		Vector2 c2 = c1 + Rect.Size;
-		Vector2 c3 = { c2.X, c1.Y };
-		Vector2 c4 = { c1.X, c2.Y };
-		c1 = c1 - Line.Origin;
-		c2 = c2 - Line.Origin;
-		c3 = c3 - Line.Origin;
-		c4 = c4 - Line.Origin;
-		dp1 = Vector2::DotProduct(n, c1);
-		dp2 = Vector2::DotProduct(n, c2);
-		dp3 = Vector2::DotProduct(n, c3);
-		dp4 = Vector2::DotProduct(n, c4);
-		return (dp1 * dp2 <= 0.0f) || (dp2 * dp3 <= 0.0f) || (dp3 * dp4 <= 0.0f);
-	}
-
-	k_internal bool32 rectangle_segment_collide(KRectangle r, Segment s)
-	{
-		Ray sLine;
-		sLine.Origin = s.PointA;
-		sLine.Direction = s.PointB - s.PointA;
-
-		if (!line_rectangle_collide(sLine, r))
-			return FALSE;
-
-		Range rRange, sRange;
-
-		rRange.Minimum = r.Position.X;
-		rRange.Maximum = r.Position.X + r.Size.X;
-		sRange.Minimum = s.PointA.X;
-		sRange.Maximum = s.PointB.X;
-		sRange = Range::Sort(sRange);
-
-		if (!Range::IsOverlapping(rRange, sRange))
-			return FALSE;
-
-		rRange.Minimum = r.Position.Y;
-		rRange.Maximum = r.Position.Y + r.Size.Y;
-		sRange.Minimum = s.PointA.Y;
-		sRange.Maximum = s.PointB.Y;
-		sRange = Range::Sort(sRange);
-
-		return Range::IsOverlapping(rRange, sRange);
-	}
-
-	k_internal bool32 oriented_rectangle_segment_collide(BoundingBox r, Segment s)
-	{
-		KRectangle lr;
-		lr.Position.X = 0;
-		lr.Position.Y = 0;
-		lr.Size = r.Extents * 2;
-
-		Segment ls;
-		ls.PointA = s.PointA - r.Center;
-		ls.PointA = Vector2::RotateVector(ls.PointA, -r.Rotation); // -r.rotation);
-		ls.PointA = ls.PointA + r.Extents;
-		ls.PointB = s.PointB - r.Center;
-		ls.PointB = Vector2::RotateVector(ls.PointB, -r.Rotation);// -r.rotation);
-		ls.PointB = ls.PointB + r.Extents;
-
-		return rectangle_segment_collide(lr, ls);
-	}
-
-	k_internal bool32 overlapping(real32 minA, real32 maxA, real32 minB, real32 maxB)
-	{ 
-		return minB <= maxA && minA <= maxB; 
-	}
-
-	k_internal bool32 rectangles_collide(KRectangle a, KRectangle b)
-	{
-		real32 aLeft = a.Position.X;
-		real32 aRight = aLeft + a.Size.X;
-		real32 bLeft = b.Position.X;
-		real32 bRight = bLeft + b.Size.X;
-		real32 aBottom = a.Position.Y;
-		real32 aTop = aBottom + a.Size.Y;
-
-		float bBottom = b.Position.Y;
-		float bTop = bBottom + b.Size.Y;
-
-		return overlapping(aLeft, aRight, bLeft, bRight) && overlapping(aBottom, aTop, bBottom, bTop);
-	}
-
-	k_internal bool32 points_collide(Vector2 a, Vector2 b) 
-	{ 
-		return a.X == b.X && a.Y == b.Y; 
-	}
-
-
 };
 
 class BoxCollider : public Collider
@@ -525,8 +420,6 @@ public:
 	inline BoxCollider()
 	{
 	}
-
-	inline virtual bool32 IsTouching(Collider* Collided) override;
 };
 
 class EdgeCollider : public Collider
@@ -536,169 +429,33 @@ public:
 	// Variables
 
 	// Gets the number of edges.
-	int32 GetEdgeCount()
-	{
-		return GetPointCount() - 1;
-	}
+	int32 EdgeCount;
 
 	// Gets the number of points.
-	int32 GetPointCount()
-	{
-		return Points.size();
-	}
+	int32 PointCount;
 
 	// Get or set the points defining multiple continuous edges.
-	std::vector<Vector2> Points;
+	std::vector<Vector2> Points;	
 
 public:
 
 	// Functions
 
-	inline EdgeCollider()
+	void Reset();
+
+	// Whether the collider is touching this collider or not.
+	inline virtual bool32 IsTouching(Collider& Collided) override
 	{
-	}
-
-	void Reset()
-	{
-		Vector2 Min = GetMinPoint();
-		Vector2 Max = GetMaxPoint();
-
-		Points.clear();
-
-		Points.push_back(Min);
-		Points.push_back(Max);
-	}
-
-	inline Vector2 GetMinPoint()
-	{
-		Vector2 Low = Points[0];
-		int32 LowIndex = 0;
-		for (int32 Index = 0; Index < Points.size(); ++Index)
-		{
-			if (Points[Index] < Low)
-			{
-				Low = Points[Index];
-				LowIndex = Index;
-			}
-		}
-
-		return GetPoint(LowIndex);
-	}
-
-	inline Vector2 GetMaxPoint()
-	{
-		Vector2 High = Points[0];
-		int32 HighIndex = 0;
-		for (int32 Index = 0; Index < Points.size(); ++Index)
-		{
-			if (Points[Index] > High)
-			{
-				High = Points[Index];
-				HighIndex = Index;
-			}
-		}
-
-		return GetPoint(HighIndex);
-	}
-
-	inline Vector2 GetPoint(int32 Index)
-	{
-		Vector2 Result = Points[Index];
-
-		Result += EntityAttachedTo->EntTransform.Position + Offset;
-
-		return (Result);
-	}
-
-	inline Segment GetSegment(int32 Index)
-	{
-		Segment Result;
-		Result.PointA = GetPoint(Index);
-		Result.PointB = GetPoint(Index + 1);
-
-		return (Result);
-	}
-
-	inline std::vector<Segment> GetSegments()
-	{
-		std::vector<Segment> Segments;
-		for (uint32 Index = 0; Index < Points.size() - 1; ++Index)
-		{
-			Segments.push_back(GetSegment(Index));
-		}
-
-		return Segments;
+		return GetBounds().Intersects(Collided.GetBounds());
 	}
 
 	// Whether the collider is touching this collider or not.
 	inline virtual bool32 IsTouching(Collider* Collided)
 	{
-		if (GetBounds().Intersects(Collided->GetBounds()))
-		{
-			if (Collided->EntityAttachedTo->Name == "Player")
-			{
-				// __debugbreak();
-			}
-
-			for (auto Seg : GetSegments())
-			{
-				if (oriented_rectangle_segment_collide(Collided->GetBounds(), Seg))
-				{
-					return TRUE;
-				}
-			}
-
-			return FALSE;
-
-			Vector2 Start = Points[0], DeltaEnd = Points[Points.size() - 1];
-			real32 PaddingX = 0;
-			real32 PaddingY = 0;
-
-			real32 ScaleX = 1.0 / DeltaEnd.X;
-			real32 ScaleY = 1.0 / DeltaEnd.Y;
-			int32 SignX = SignOf(ScaleX);
-			int32 SignY = SignOf(ScaleY);
-
-			real32 NearTimeX = (GetBounds().Center.X - SignX * (GetBounds().Extents.X + PaddingX) - Start.X) * ScaleX;
-			real32 NearTimeY = (GetBounds().Center.Y - SignY * (GetBounds().Extents.Y + PaddingY) - Start.Y) * ScaleY;
-			real32 FarTimeX = (GetBounds().Center.X + SignX * (GetBounds().Extents.X + PaddingX) - Start.X) * ScaleX;
-			real32 FarTimeY = (GetBounds().Center.Y + SignY * (GetBounds().Extents.Y + PaddingY) - Start.Y) * ScaleY;
-
-			if (NearTimeX > FarTimeY || NearTimeY > FarTimeX)
-			{
-				return FALSE;
-			}
-
-			real32 NearTime;
-			if (NearTimeX > NearTimeY)
-			{
-				NearTime = NearTimeX;
-			}
-			else
-			{
-				NearTime = NearTimeY;
-			}
-
-			real32 FarTime;
-			if (FarTimeX < FarTimeY)
-			{
-				FarTime = FarTimeX;
-			}
-			else
-			{
-				FarTime = FarTimeY;
-			}
-
-			if (NearTime >= 1 || FarTime <= 0)
-			{
-				return FALSE;
-			}
-		}
-
-		return FALSE;
+		return GetBounds().Intersects(Collided->GetBounds());
 	}
 
-	inline bool32 IsTouching(Vector2 Start, Vector2 DeltaEnd, Collision& HitInfo, int32 PaddingX = 0, int32 PaddingY = 0)
+	inline bool32 IsTouching(Vector2 Start, Vector2 DeltaEnd, int32 PaddingX = 0, int32 PaddingY = 0)
 	{
 		real32 ScaleX = 1.0 / DeltaEnd.X;
 		real32 ScaleY = 1.0 / DeltaEnd.Y;
@@ -712,63 +469,55 @@ public:
 
 		if (NearTimeX > FarTimeY || NearTimeY > FarTimeX)
 		{
-			return FALSE;
+				return FALSE;
 		}
 
 		real32 NearTime;
-		if (NearTimeX > NearTimeY)
-		{
-			NearTime = NearTimeX;
-		}
-		else
-		{
-			NearTime = NearTimeY;
-		}
+				if (NearTimeX > NearTimeY)
+				{
+					NearTime = NearTimeX;
+				}
+				else
+				{
+					NearTime = NearTimeY;
+				}
+				
+				real32 FarTime;
+				if(FarTimeX < FarTimeY)
+				{
+					FarTime = FarTimeX;
+				}
+				else 
+				{
+					FarTime = FarTimeY;
+				}
 
-		real32 FarTime;
-		if (FarTimeX < FarTimeY)
-		{
-			FarTime = FarTimeX;
-		}
-		else
-		{
-			FarTime = FarTimeY;
-		}
+				if (NearTime >= 1 || FarTime <= 0)
+				{
+					return FALSE;
+				}
 
-		if (NearTime >= 1 || FarTime <= 0)
-		{
-			return FALSE;
-		}
 
-		// Collision Hit;
-		int32 DidHit = Clamp01(NearTime);
-		if (NearTimeX > NearTimeY)
-		{
-			// Hit.Normal.X = -SignX;
-			// Hit.Normal.Y = 0;
-		}
-		else
-		{
-			// Hit.Normal.X = 0;
-			// Hit.Normal.Y = -SignY;
-			// Hit.RelativeVelocity.X = DidHit * DeltaEnd.X;
-			// Hit.RelativeVelocity.Y = DidHit * DeltaEnd.Y;
+				Collision Hit;
+				int32 DidHit = Clamp01(NearTime);
+				if (NearTimeX > NearTimeY)
+				{
+					Hit.Normal.X = -SignX;
+					Hit.Normal.Y = 0;
+				}
+				else
+				{
+					Hit.Normal.X = 0;
+						Hit.Normal.Y = -SignY;
+						Hit.RelativeVelocity.X = DidHit * DeltaEnd.X;
+						Hit.RelativeVelocity.Y = DidHit * DeltaEnd.Y;
 
-			ContactPoint Contact;
-			// Contact.Point.X = GetBounds().Center.X + Hit.RelativeVelocity.X;
-			// Contact.Point.Y = GetBounds().Center.Y + Hit.RelativeVelocity.Y;
-			// Hit.Contacts.push_back(Contact);
-		}
-
-		// return Hit;
-		return TRUE;
-	}
-
-	inline virtual BoundingBox GetBounds() override
-	{
-		Bounds.SetMinMax(GetMinPoint(), GetMaxPoint());
-
-		return Bounds;
+						Vector2 Contact;
+						Contact.X = GetBounds().Center.X + hit.delta.x;
+						Contact.Y = pos.y + hit.delta.y;
+				}
+						
+				return Hit;
 	}
 };
 
@@ -977,48 +726,14 @@ public:
 	{
 	}
 
-	inline void SlopeTest(const Collision& CollideInfo)
-	{
-		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		Vector2 Lowest = CollideInfo.Contacts[0].Point.Y;
-		int32 LowestIndex = 0;
-
-		if (CollideInfo.Contacts.size() > 1)
-		{
-			for (int32 Index = 0; Index < CollideInfo.Contacts.size(); ++Index)
-			{
-				if (Lowest.Y < CollideInfo.Contacts[Index].Point.Y)
-				{
-					Lowest = CollideInfo.Contacts[Index].Point;
-					LowestIndex = Index;
-				}
-			}
-		}
-
-		real32 Angle = Vector2::Angle(CollideInfo.Contacts[LowestIndex].Normal, EntTransform->Position) * RADIANS_CONSTANT;
-		// real32 Radians = ToRadians(Angle);
-
-		if (AbsoluteValue(Angle) < 30.0f)
-		{
-			EntTransform->Position.Y = Lowest.Y - BodyCollider->GetBounds().GetSize().Y;
-		}
-	}
-
 	inline virtual void OnCollisionStart(const Collision& CollideInfo) override
 	{
 		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
 
 		if (CollideInfo.Normal.Y > 0.0f)
 		{
 			IsGrounded = TRUE;
 			Ground = CollideInfo.Collider;
-			Velocity.Y = 0.0f;
-
-			
 		}
 		else if (CollideInfo.Normal.Y < 0.0f)
 		{
@@ -1026,6 +741,7 @@ public:
 		}
 		else
 		{
+
 		}
 
 		if (CollideInfo.Normal.X > 0.0f)
@@ -1050,15 +766,10 @@ public:
 	{
 		Transform* EntTransform = &EntityAttachedTo->EntTransform;
 
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
-
 		if (CollideInfo.Normal.Y > 0.0f)
 		{
 			IsGrounded = TRUE;
 			Ground = CollideInfo.Collider;
-
-			Velocity.Y = 0.0f;
 		}
 		else if (CollideInfo.Normal.Y < 0.0f)
 		{
@@ -1066,6 +777,7 @@ public:
 		}
 		else
 		{
+
 		}
 
 		if (CollideInfo.Normal.X > 0.0f)
@@ -1138,6 +850,7 @@ public:
 
 	inline void Update() override
 	{
+		
 	}
 
 	inline void FixedUpdate() override
@@ -1397,7 +1110,6 @@ public:
 
 	SDL_Texture* BackgroundTexture;
 
-	std::vector<GameEntity*> SlopeList;
 	std::vector<Tile*> TileList;
 	std::vector<Tileset> TileSets;
 

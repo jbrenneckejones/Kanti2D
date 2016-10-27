@@ -1,43 +1,25 @@
 #ifndef KANTI2D_GAMEOBJECT
 
-struct ContactPoint
-{
-	// Normal of the contact point.
-	Vector2 Normal;
-
-	// The point of contact.
-	Vector2 Point;
-
-	// The first collider in contact at the point.
-	class Collider* ThisCollider;
-
-	// The other collider in contact at the point.
-	class Collider* OtherCollider;
-};
-
 struct Collision
 {
 	// The collider attached to the object receiving the collision message.
-	class Collider* Caller;
+	class Collider* CalledOnCollider;
 
 	// Surface normal at the contact point.
 	Vector2 Normal;
 
 	// The incoming collider involved in the collision at this contact point.
-	class Collider* Collider;
+	class Collider* IncomingCollider;
 
-	// The specific points of contact with the incoming Collider2D.
-	std::vector<ContactPoint> Contacts;
+	// The point of contact between the two colliders in world space.
+	Vector2 Point;
 
-	// The relative linear velocity of the two colliding objects.
-	Vector2 RelativeVelocity;
+	Collision()
+	{
 
-	inline Collision() {};
+	}
 
-	Collision(class Collider* CalledOnCollider, class Collider* IncomingCollider);
-
-	// Assumes that they're already confirmed colliding
-	k_internal inline void GetCollisionInfo(class Collider* Caller, class Collider* Collided, struct Collision& Info);
+	Collision(class Collider* Caller, class Collider* HitCollider);
 };
 
 class Entity
@@ -71,7 +53,7 @@ public:
 
 	virtual ~Entity() {};
 
-	bool32 operator ==(const Entity& Comparer)
+	bool32 operator ==(const Entity& Comparer) 
 	{
 		return InstanceID == Comparer.InstanceID;
 	}
@@ -111,6 +93,7 @@ public:
 
 	inline GameComponent()
 	{
+
 	};
 
 	virtual ~GameComponent() {};
@@ -166,6 +149,7 @@ public:
 
 	inline GameEntity()
 	{
+
 	}
 
 	inline GameEntity(string ObjectName) : Entity(ObjectName)
@@ -220,7 +204,17 @@ public:
 		AddHandlers();
 	}
 
-	inline void AddHandlers();
+	inline void AddHandlers()
+	{
+		// void* Pointer = (void *)(this->OnCollisionEnd);
+		if (true)//(GameBehavour::*)Pointer == &GameBehaviour::OnCollisionStart)
+			std::cout << "not overridden" << std::endl;
+		else
+			std::cout << "overridden" << std::endl;
+
+		// GameEventSystem::EventSystem->AddUpdateHandler(this);
+		// GameEventSystem::EventSystem->AddFixedUpdateHandler(this);
+	}
 
 	virtual ~GameBehaviour() {};
 
@@ -236,6 +230,7 @@ public:
 	virtual void Start() {};
 	virtual void FixedUpdate() {};
 	virtual void Update() {};
+
 };
 
 class Renderer : public GameComponent
@@ -248,7 +243,10 @@ public:
 
 	// Functions
 
-	inline Renderer();
+	inline Renderer()
+	{
+		GameEventSystem::EventSystem->AddDrawHandler(this);
+	}
 
 	virtual void Update() = 0;
 
@@ -266,7 +264,7 @@ public:
 
 	// Variables
 
-	KRectangle TextureRect;
+	BoundingBox TextureRect;
 	SDL_Texture* SpriteSheet;
 
 	BoundingBox Bounds;
@@ -277,24 +275,40 @@ public:
 
 	inline Sprite()
 	{
-		TextureRect = KRectangle(Vector2(0, 0), Vector2(32, 32));
-		Bounds = BoundingBox(Vector2(16, 16), Vector2(32, 32));
+		TextureRect = BoundingBox(Vector2(0, 0), Vector2(32, 32));
 	}
 
 	inline Sprite(const string &FileName,
-		struct KRectangle TextureRectangle)
+		struct BoundingBox RenderRectangle)
 	{
-		SetupSprite(FileName, TextureRectangle);
+		SetupSprite(FileName, RenderRectangle);
 	}
 
-	inline void SetupSprite(const string &FileName, struct KRectangle TextureRectangle);
+	inline void SetupSprite(const string &FileName,
+		struct BoundingBox RenderRectangle)
+	{
+		TextureRect = RenderRectangle;
+
+		SDL_Surface* Surface = RenderManager::CurrentRenderer->LoadImage(FileName);
+
+		SDL_SetColorKey(Surface, 1, SDL_MapRGB(Surface->format, 0, 0, 0));
+
+		SpriteSheet = SDL_CreateTextureFromSurface(RenderManager::CurrentRenderer->SDLRenderer, Surface);
+
+		if (!SpriteSheet)
+		{
+			printf("\nError: Unable to load image\n");
+		}
+
+		Bounds = TextureRect;
+	}
 };
 
 class Collider : public GameComponent
 {
 public:
 
-	// Variables
+	// Variables		
 
 	UniqueID* CellIndex;
 
@@ -320,7 +334,10 @@ public:
 
 	// Functions
 
-	inline Collider();
+	inline Collider() : Bounds({ 0, 0 }, { 1, 1 })
+	{
+		GameEventSystem::EventSystem->AddCollisionHandler(this);
+	}
 
 	inline virtual void OnCollisionStart(const Collision& CollideInfo)
 	{
@@ -364,28 +381,36 @@ public:
 	// Sent when another object enters a trigger collider attached to this object.
 	inline virtual void OnTriggerEnter(const Collider& Collided)
 	{
+
 	}
 
 	// Sent each frame where another object is within a trigger collider attached to this object.
 	inline virtual void OnTriggerStay(const Collider& Collided)
 	{
+
 	}
 
 	// Sent when another object leaves a trigger collider attached to this object.
 	inline virtual void OnTriggerExit(const Collider& Collided)
 	{
+
+	}
+
+	inline virtual Collision GetCollisionInfo(const Collider& Collide)
+	{
+		return Collision();
 	}
 
 	// Whether the collider is touching this collider or not.
-	inline virtual bool32 IsTouching(Collider* Collided)
+	inline virtual bool32 IsTouching(const Collider& Collided)
 	{
-		return GetBounds().Intersects(Collided->GetBounds());
+		return Bounds.Intersects(Collided.Bounds);
 	}
 
 	// Does point overlap the collider?
 	inline virtual bool32 OverlapPoint(Vector2 Point)
 	{
-		return GetBounds().Contains(Point);
+		return Bounds.Contains(Point);
 	}
 
 	// Whether this collider is touching any collider on the specified layerMask or not.
@@ -393,121 +418,6 @@ public:
 	{
 		return TRUE;
 	}
-
-	inline virtual BoundingBox GetBounds();
-
-	bool operator == (const Collider& Other)
-	{
-		return InstanceID == Other.InstanceID;
-	}
-
-	k_internal bool32 line_oriented_rectangle_collide(Ray Line, BoundingBox r)
-	{
-		KRectangle lr;
-		lr.Position.X = 0;
-		lr.Position.Y = 0;
-		lr.Size = r.Extents * 2;
-
-		Ray ll;
-		ll.Origin = Line.Origin - r.Center;
-		ll.Origin = Vector2::RotateVector(ll.Origin, -r.Rotation); // -r.rotation);
-		ll.Origin = ll.Origin + r.Extents;
-		ll.Direction = Vector2::RotateVector(Line.Direction, -r.Rotation); // -r.rotation);
-		return line_rectangle_collide(ll, lr);
-	}
-
-	k_internal bool32 line_rectangle_collide(Ray Line, KRectangle Rect)
-	{
-		Vector2 n = Vector2::Rotate90Degrees(Line.Direction);
-		real32 dp1, dp2, dp3, dp4;
-		Vector2 c1 = Rect.Position;
-		Vector2 c2 = c1 + Rect.Size;
-		Vector2 c3 = { c2.X, c1.Y };
-		Vector2 c4 = { c1.X, c2.Y };
-		c1 = c1 - Line.Origin;
-		c2 = c2 - Line.Origin;
-		c3 = c3 - Line.Origin;
-		c4 = c4 - Line.Origin;
-		dp1 = Vector2::DotProduct(n, c1);
-		dp2 = Vector2::DotProduct(n, c2);
-		dp3 = Vector2::DotProduct(n, c3);
-		dp4 = Vector2::DotProduct(n, c4);
-		return (dp1 * dp2 <= 0.0f) || (dp2 * dp3 <= 0.0f) || (dp3 * dp4 <= 0.0f);
-	}
-
-	k_internal bool32 rectangle_segment_collide(KRectangle r, Segment s)
-	{
-		Ray sLine;
-		sLine.Origin = s.PointA;
-		sLine.Direction = s.PointB - s.PointA;
-
-		if (!line_rectangle_collide(sLine, r))
-			return FALSE;
-
-		Range rRange, sRange;
-
-		rRange.Minimum = r.Position.X;
-		rRange.Maximum = r.Position.X + r.Size.X;
-		sRange.Minimum = s.PointA.X;
-		sRange.Maximum = s.PointB.X;
-		sRange = Range::Sort(sRange);
-
-		if (!Range::IsOverlapping(rRange, sRange))
-			return FALSE;
-
-		rRange.Minimum = r.Position.Y;
-		rRange.Maximum = r.Position.Y + r.Size.Y;
-		sRange.Minimum = s.PointA.Y;
-		sRange.Maximum = s.PointB.Y;
-		sRange = Range::Sort(sRange);
-
-		return Range::IsOverlapping(rRange, sRange);
-	}
-
-	k_internal bool32 oriented_rectangle_segment_collide(BoundingBox r, Segment s)
-	{
-		KRectangle lr;
-		lr.Position.X = 0;
-		lr.Position.Y = 0;
-		lr.Size = r.Extents * 2;
-
-		Segment ls;
-		ls.PointA = s.PointA - r.Center;
-		ls.PointA = Vector2::RotateVector(ls.PointA, -r.Rotation); // -r.rotation);
-		ls.PointA = ls.PointA + r.Extents;
-		ls.PointB = s.PointB - r.Center;
-		ls.PointB = Vector2::RotateVector(ls.PointB, -r.Rotation);// -r.rotation);
-		ls.PointB = ls.PointB + r.Extents;
-
-		return rectangle_segment_collide(lr, ls);
-	}
-
-	k_internal bool32 overlapping(real32 minA, real32 maxA, real32 minB, real32 maxB)
-	{ 
-		return minB <= maxA && minA <= maxB; 
-	}
-
-	k_internal bool32 rectangles_collide(KRectangle a, KRectangle b)
-	{
-		real32 aLeft = a.Position.X;
-		real32 aRight = aLeft + a.Size.X;
-		real32 bLeft = b.Position.X;
-		real32 bRight = bLeft + b.Size.X;
-		real32 aBottom = a.Position.Y;
-		real32 aTop = aBottom + a.Size.Y;
-
-		float bBottom = b.Position.Y;
-		float bTop = bBottom + b.Size.Y;
-
-		return overlapping(aLeft, aRight, bLeft, bRight) && overlapping(aBottom, aTop, bBottom, bTop);
-	}
-
-	k_internal bool32 points_collide(Vector2 a, Vector2 b) 
-	{ 
-		return a.X == b.X && a.Y == b.Y; 
-	}
-
-
 };
 
 class BoxCollider : public Collider
@@ -524,252 +434,59 @@ public:
 
 	inline BoxCollider()
 	{
+		
 	}
 
-	inline virtual bool32 IsTouching(Collider* Collided) override;
+	inline Collision GetCollisionInfo(Collider* Collide)
+	{
+		Collision Result = {};
+
+		if (!Collide)
+		{
+			return Result;
+		}
+
+		/*
+
+		real32 AmountTop, AmountBottom, AmountRight, AmountLeft;
+
+		BoundingBox* CominedRect = (BoundingBox *)GetBoundsCombined();
+		BoundingBox* CombinedRectCollide = (BoundingBox *)Rect->GetBoundsCombined();
+
+		AmountTop = CombinedRectCollide->GetBottom() - CominedRect->GetTop();
+		AmountBottom = CominedRect->GetBottom() - CombinedRectCollide->GetTop();
+		AmountLeft = CombinedRectCollide->GetRight() - CominedRect->GetLeft();
+		AmountRight = CominedRect->GetRight() - CombinedRectCollide->GetLeft();
+
+		real32 Values[4] = { AbsoluteValue(AmountTop), AbsoluteValue(AmountBottom),
+			AbsoluteValue(AmountLeft) , AbsoluteValue(AmountRight) };
+
+		real32 Lowest = Values[0];
+		uint32 LowIndex = 0;
+		for (uint32 Index = 0; Index < 4; ++Index)
+		{
+			if (Values[Index] < Lowest)
+			{
+				Lowest = Values[Index];
+				LowIndex = Index;
+				Result.OverlapAmount = Values[Index];
+			}
+		}
+
+		*/
+		
+
+		Result.IncomingCollider = Collide;
+		// Result.OverlapAmount = Lowest;
+		// Result.SideOverlapped = (SIDE)LowIndex;
+
+		return (Result);
+	}
 };
 
-class EdgeCollider : public Collider
+class ColliderSlope : public Collider
 {
-public:
 
-	// Variables
-
-	// Gets the number of edges.
-	int32 GetEdgeCount()
-	{
-		return GetPointCount() - 1;
-	}
-
-	// Gets the number of points.
-	int32 GetPointCount()
-	{
-		return Points.size();
-	}
-
-	// Get or set the points defining multiple continuous edges.
-	std::vector<Vector2> Points;
-
-public:
-
-	// Functions
-
-	inline EdgeCollider()
-	{
-	}
-
-	void Reset()
-	{
-		Vector2 Min = GetMinPoint();
-		Vector2 Max = GetMaxPoint();
-
-		Points.clear();
-
-		Points.push_back(Min);
-		Points.push_back(Max);
-	}
-
-	inline Vector2 GetMinPoint()
-	{
-		Vector2 Low = Points[0];
-		int32 LowIndex = 0;
-		for (int32 Index = 0; Index < Points.size(); ++Index)
-		{
-			if (Points[Index] < Low)
-			{
-				Low = Points[Index];
-				LowIndex = Index;
-			}
-		}
-
-		return GetPoint(LowIndex);
-	}
-
-	inline Vector2 GetMaxPoint()
-	{
-		Vector2 High = Points[0];
-		int32 HighIndex = 0;
-		for (int32 Index = 0; Index < Points.size(); ++Index)
-		{
-			if (Points[Index] > High)
-			{
-				High = Points[Index];
-				HighIndex = Index;
-			}
-		}
-
-		return GetPoint(HighIndex);
-	}
-
-	inline Vector2 GetPoint(int32 Index)
-	{
-		Vector2 Result = Points[Index];
-
-		Result += EntityAttachedTo->EntTransform.Position + Offset;
-
-		return (Result);
-	}
-
-	inline Segment GetSegment(int32 Index)
-	{
-		Segment Result;
-		Result.PointA = GetPoint(Index);
-		Result.PointB = GetPoint(Index + 1);
-
-		return (Result);
-	}
-
-	inline std::vector<Segment> GetSegments()
-	{
-		std::vector<Segment> Segments;
-		for (uint32 Index = 0; Index < Points.size() - 1; ++Index)
-		{
-			Segments.push_back(GetSegment(Index));
-		}
-
-		return Segments;
-	}
-
-	// Whether the collider is touching this collider or not.
-	inline virtual bool32 IsTouching(Collider* Collided)
-	{
-		if (GetBounds().Intersects(Collided->GetBounds()))
-		{
-			if (Collided->EntityAttachedTo->Name == "Player")
-			{
-				// __debugbreak();
-			}
-
-			for (auto Seg : GetSegments())
-			{
-				if (oriented_rectangle_segment_collide(Collided->GetBounds(), Seg))
-				{
-					return TRUE;
-				}
-			}
-
-			return FALSE;
-
-			Vector2 Start = Points[0], DeltaEnd = Points[Points.size() - 1];
-			real32 PaddingX = 0;
-			real32 PaddingY = 0;
-
-			real32 ScaleX = 1.0 / DeltaEnd.X;
-			real32 ScaleY = 1.0 / DeltaEnd.Y;
-			int32 SignX = SignOf(ScaleX);
-			int32 SignY = SignOf(ScaleY);
-
-			real32 NearTimeX = (GetBounds().Center.X - SignX * (GetBounds().Extents.X + PaddingX) - Start.X) * ScaleX;
-			real32 NearTimeY = (GetBounds().Center.Y - SignY * (GetBounds().Extents.Y + PaddingY) - Start.Y) * ScaleY;
-			real32 FarTimeX = (GetBounds().Center.X + SignX * (GetBounds().Extents.X + PaddingX) - Start.X) * ScaleX;
-			real32 FarTimeY = (GetBounds().Center.Y + SignY * (GetBounds().Extents.Y + PaddingY) - Start.Y) * ScaleY;
-
-			if (NearTimeX > FarTimeY || NearTimeY > FarTimeX)
-			{
-				return FALSE;
-			}
-
-			real32 NearTime;
-			if (NearTimeX > NearTimeY)
-			{
-				NearTime = NearTimeX;
-			}
-			else
-			{
-				NearTime = NearTimeY;
-			}
-
-			real32 FarTime;
-			if (FarTimeX < FarTimeY)
-			{
-				FarTime = FarTimeX;
-			}
-			else
-			{
-				FarTime = FarTimeY;
-			}
-
-			if (NearTime >= 1 || FarTime <= 0)
-			{
-				return FALSE;
-			}
-		}
-
-		return FALSE;
-	}
-
-	inline bool32 IsTouching(Vector2 Start, Vector2 DeltaEnd, Collision& HitInfo, int32 PaddingX = 0, int32 PaddingY = 0)
-	{
-		real32 ScaleX = 1.0 / DeltaEnd.X;
-		real32 ScaleY = 1.0 / DeltaEnd.Y;
-		int32 SignX = SignOf(ScaleX);
-		int32 SignY = SignOf(ScaleY);
-
-		real32 NearTimeX = (GetBounds().Center.X - SignX * (GetBounds().Extents.X + PaddingX) - Start.X) * ScaleX;
-		real32 NearTimeY = (GetBounds().Center.Y - SignY * (GetBounds().Extents.Y + PaddingY) - Start.Y) * ScaleY;
-		real32 FarTimeX = (GetBounds().Center.X + SignX * (GetBounds().Extents.X + PaddingX) - Start.X) * ScaleX;
-		real32 FarTimeY = (GetBounds().Center.Y + SignY * (GetBounds().Extents.Y + PaddingY) - Start.Y) * ScaleY;
-
-		if (NearTimeX > FarTimeY || NearTimeY > FarTimeX)
-		{
-			return FALSE;
-		}
-
-		real32 NearTime;
-		if (NearTimeX > NearTimeY)
-		{
-			NearTime = NearTimeX;
-		}
-		else
-		{
-			NearTime = NearTimeY;
-		}
-
-		real32 FarTime;
-		if (FarTimeX < FarTimeY)
-		{
-			FarTime = FarTimeX;
-		}
-		else
-		{
-			FarTime = FarTimeY;
-		}
-
-		if (NearTime >= 1 || FarTime <= 0)
-		{
-			return FALSE;
-		}
-
-		// Collision Hit;
-		int32 DidHit = Clamp01(NearTime);
-		if (NearTimeX > NearTimeY)
-		{
-			// Hit.Normal.X = -SignX;
-			// Hit.Normal.Y = 0;
-		}
-		else
-		{
-			// Hit.Normal.X = 0;
-			// Hit.Normal.Y = -SignY;
-			// Hit.RelativeVelocity.X = DidHit * DeltaEnd.X;
-			// Hit.RelativeVelocity.Y = DidHit * DeltaEnd.Y;
-
-			ContactPoint Contact;
-			// Contact.Point.X = GetBounds().Center.X + Hit.RelativeVelocity.X;
-			// Contact.Point.Y = GetBounds().Center.Y + Hit.RelativeVelocity.Y;
-			// Hit.Contacts.push_back(Contact);
-		}
-
-		// return Hit;
-		return TRUE;
-	}
-
-	inline virtual BoundingBox GetBounds() override
-	{
-		Bounds.SetMinMax(GetMinPoint(), GetMaxPoint());
-
-		return Bounds;
-	}
 };
 
 class SpriteRenderer : public Renderer
@@ -790,18 +507,25 @@ public:
 
 	inline virtual void Update() override
 	{
+
 	}
 
 	inline virtual void Draw() override
 	{
-		KRectangle DestinationRectangle = KRectangle(EntityAttachedTo->EntTransform.Position,
-			SpriteToRender.Bounds.GetSize() * EntityAttachedTo->EntTransform.Scale);
+		BoundingBox DestinationRectangle = 
+			BoundingBox
+			( 
+				EntityAttachedTo->EntTransform.Position, SpriteToRender.TextureRect.GetSize()
+			);
 		// RenderGraphics.BlitSurface(SpriteSheet, &SourceRect, &DestinationRectangle);
 
 		BlitSprite(SpriteToRender.TextureRect.ToSDLRect(), DestinationRectangle.ToSDLRect());
 	}
 
-	inline void BlitSprite(SDL_Rect Source, SDL_Rect Destination);
+	inline void BlitSprite(SDL_Rect Source, SDL_Rect Destination)
+	{
+		RenderManager::CurrentRenderer->BlitSurface(SpriteToRender.SpriteSheet, &Source, &Destination);
+	}
 };
 
 // TODO(Julian): Maybe do a override call instead of inheritence
@@ -857,16 +581,16 @@ public:
 	{
 		if (IsVisible == 1)
 		{
-			// TODO(Julian): Fix this
-			KRectangle DestinationRectangle =
+			BoundingBox DestinationRectangle =
 			{
 				EntityAttachedTo->EntTransform.Position + Offsets[CurrentAnim],
 				SpriteToRender.TextureRect.GetSize()
 			};
 
-			KRectangle SourceRectangle = { Animations[CurrentAnim][FrameIndex] };
+			BoundingBox SourceRectangle = { Animations[CurrentAnim][FrameIndex] };
 
 			SpriteToRender.TextureRect = SourceRectangle;
+
 
 			BlitSprite(SourceRectangle.ToSDLRect(), DestinationRectangle.ToSDLRect());
 		}
@@ -944,7 +668,10 @@ public:
 
 	// Functions
 
-	inline PhysicsComponent();
+	inline PhysicsComponent()
+	{
+		GameEventSystem::EventSystem->AddPhysicsHandler(this);
+	}
 };
 
 class RigidBody2D : public PhysicsComponent
@@ -953,21 +680,19 @@ public:
 
 	// Variables
 
-	real32 GravityRate = 5.0f;
-	real32 GravityMax = 10.0f;
-	real32 Friction = 0.5f;
+	real32 GravityRate = 0.002f;
+	real32 GravityMax = 0.8f;
+	real32 Friction = 0.1f;
 	real32 Mass = 1.0f;
 
 	Vector2 Velocity = Vector2(0, 0);
-	Vector2 MaxVelocity = Vector2(10.0f, 100.0f);
+	Vector2 MaxVelocity = Vector2(10.0f, GravityMax);
 	Vector2 Acceleration = Vector2(0, 0);
 
-	Collider* BodyCollider;
+	Collider* Collider;
 
-	Collider* Ground;
+
 	bool32 IsGrounded = FALSE;
-	bool32 IsLeftWall = FALSE;
-	bool32 IsRightWall = FALSE;
 
 public:
 
@@ -977,143 +702,92 @@ public:
 	{
 	}
 
-	inline void SlopeTest(const Collision& CollideInfo)
-	{
-		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		Vector2 Lowest = CollideInfo.Contacts[0].Point.Y;
-		int32 LowestIndex = 0;
-
-		if (CollideInfo.Contacts.size() > 1)
-		{
-			for (int32 Index = 0; Index < CollideInfo.Contacts.size(); ++Index)
-			{
-				if (Lowest.Y < CollideInfo.Contacts[Index].Point.Y)
-				{
-					Lowest = CollideInfo.Contacts[Index].Point;
-					LowestIndex = Index;
-				}
-			}
-		}
-
-		real32 Angle = Vector2::Angle(CollideInfo.Contacts[LowestIndex].Normal, EntTransform->Position) * RADIANS_CONSTANT;
-		// real32 Radians = ToRadians(Angle);
-
-		if (AbsoluteValue(Angle) < 30.0f)
-		{
-			EntTransform->Position.Y = Lowest.Y - BodyCollider->GetBounds().GetSize().Y;
-		}
-	}
-
 	inline virtual void OnCollisionStart(const Collision& CollideInfo) override
 	{
+		/*
+		BoundingBox* CurrentCollision = (BoundingBox *)CollideInfo.IncomingCollider->Bounds;
+
+		SIDE CollisionSide = CollideInfo.SideOverlapped;
+
 		Transform* EntTransform = &EntityAttachedTo->EntTransform;
 
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
-
-		if (CollideInfo.Normal.Y > 0.0f)
+		if (CollisionSide != SIDE::NONE)
 		{
-			IsGrounded = TRUE;
-			Ground = CollideInfo.Collider;
-			Velocity.Y = 0.0f;
-
-			
-		}
-		else if (CollideInfo.Normal.Y < 0.0f)
-		{
-			Velocity.Y = 0.0f;
-		}
-		else
-		{
-		}
-
-		if (CollideInfo.Normal.X > 0.0f)
-		{
-			if (Velocity.X > 0.0f)
+			switch (CollisionSide)
 			{
+			case SIDE::TOP:
+				// EntTransform->Position.Y = (real32)CurrentCollision.GetBottom() + 1.0f;
+				EntTransform->Position.Y -= CollideInfo.OverlapAmount + 1.0f;
+				Velocity.Y = 0.0f;
+				break;
+
+			case SIDE::BOTTOM:
+				// EntTransform->Position.Y = (real32)CurrentCollision.GetTop() - (real32)CurrentCollision.Height - 1.0f;
+				EntTransform->Position.Y += CollideInfo.OverlapAmount - 1.0f;
+				Velocity.Y = 0.0f;
+				IsGrounded = TRUE;
+				break;
+
+			case SIDE::LEFT:
+				// EntTransform->Position.X = (real32)CurrentCollision.GetRight() + 1.0f;
+				EntTransform->Position.X += CollideInfo.OverlapAmount + 1.0f;
 				Velocity.X = 0.0f;
-				EntTransform->Position.X -= 1.0f;
+				break;
+
+			case SIDE::RIGHT:
+				// EntTransform->Position.X = (real32)CurrentCollision.GetLeft() - (real32)CurrentCollision.Width - 1.0f;
+				EntTransform->Position.X -= CollideInfo.OverlapAmount - 1.0f;
+				Velocity.X = 0.0f;
+				break;
+
+			default:
+				break;
 			}
 		}
-		else if (CollideInfo.Normal.X < 0.0f)
-		{
-			if (Velocity.X < 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X += 1.0f;
-			}
-		}
-	}
 
-	inline virtual void OnCollisionStay(const Collision& CollideInfo) override
-	{
-		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
-
-		if (CollideInfo.Normal.Y > 0.0f)
-		{
-			IsGrounded = TRUE;
-			Ground = CollideInfo.Collider;
-
-			Velocity.Y = 0.0f;
-		}
-		else if (CollideInfo.Normal.Y < 0.0f)
-		{
-			Velocity.Y = 0.0f;
-		}
-		else
-		{
-		}
-
-		if (CollideInfo.Normal.X > 0.0f)
-		{
-			if (Velocity.X > 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X -= 1.0f;
-			}
-		}
-		else if (CollideInfo.Normal.X < 0.0f)
-		{
-			if (Velocity.X < 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X += 1.0f;
-			}
-		}
+		*/
 	}
 
 	inline virtual void OnCollisionEnd(const Collision& CollideInfo) override
 	{
-		if (CollideInfo.Collider == Ground)
+		/*
+		BoundingBox* CurrentCollision = (BoundingBox *)CollideInfo.IncomingCollider->Bounds;
+
+		SIDE CollisionSide = CollideInfo.SideOverlapped;
+
+		Transform* EntTransform = &EntityAttachedTo->EntTransform;
+
+		if (CollisionSide != SIDE::NONE)
 		{
-			Ground = nullptr;
-			IsGrounded = FALSE;
+			switch (CollisionSide)
+			{
+			case SIDE::TOP:
+
+				break;
+
+			case SIDE::BOTTOM:
+				IsGrounded = FALSE;
+				break;
+
+			case SIDE::LEFT:
+				break;
+
+			case SIDE::RIGHT:
+				break;
+
+			default:
+				break;
+			}
 		}
+
+		*/
 	}
 
 	inline void AddFriction()
 	{
 		if (!IsGrounded)
 		{
-			if (Velocity.Y > GravityMax)
-			{
-				Velocity.Y = GravityMax;
-			}
-			else
-			{
-				Velocity.Y += GravityRate;
-			}
-		}
-		else
-		{
-			if (Velocity.Y > 0.0f)
-			{
-				Velocity.Y = 0.0f;
-			}
+			Velocity.Y += GravityRate;
 		}
 
 		if (AbsoluteValue(Velocity.X) < 0.1f)
@@ -1131,16 +805,12 @@ public:
 				Velocity.X += Friction;
 			}
 		}
-
+		
 		Velocity.X = SignOf(Velocity.X) * Clamp(0.0f, AbsoluteValue(Velocity.X), MaxVelocity.X);
 		Velocity.Y = SignOf(Velocity.Y) * Clamp(0.0f, AbsoluteValue(Velocity.Y), MaxVelocity.Y);
 	}
 
 	inline void Update() override
-	{
-	}
-
-	inline void FixedUpdate() override
 	{
 		AddFriction();
 
@@ -1190,12 +860,11 @@ public:
 
 	SpriteAnimator* Animator;
 	RigidBody2D* RigidBody;
-	Collider* PlayerCollider;
+	Collider* Collider;
 
 	DIRECTION CurrentDirection;
 
 	real32 Speed = 5.0f;
-	real32 JumpAmount = 75.0f;
 
 public:
 
@@ -1222,8 +891,7 @@ public:
 		Animator = EntityAttachedTo->AddComponent<SpriteAnimator>();
 		// Animator->GameEnt = GameObject;
 		// Animator->EntityAttachedTo = &GameObject;
-		Animator->SpriteToRender.SetupSprite("../Data/Images/MyChar.bmp",
-			KRectangle(0, 0, 32, 32));
+		Animator->SpriteToRender.SetupSprite("../Data/Images/MyChar.bmp", SDL_Rect{ 0, 0, 32, 32 });
 
 		// "../Data/Images/MyChar.bmp", SDL_Rect{ 0, 0, 32, 32 }, ObjectPosition, 300
 		// GameObject->Components.push_back(Animator);
@@ -1243,9 +911,9 @@ public:
 		Animator->Layer = 1;
 
 		RigidBody = EntityAttachedTo->AddComponent<RigidBody2D>();
-		PlayerCollider = EntityAttachedTo->AddComponent<BoxCollider>();
-		RigidBody->BodyCollider = PlayerCollider;
-		PlayerCollider->Bounds = BoundingBox(Vector2(16, 16), Vector2(24, 32));
+		Collider = EntityAttachedTo->AddComponent<BoxCollider>();
+		RigidBody->Collider = Collider;
+		Collider->Bounds = Animator->SpriteToRender.TextureRect;
 	}
 
 	inline void Move(DIRECTION FacingDirection)
@@ -1288,14 +956,9 @@ public:
 		}
 	}
 
-	inline void Jump()
-	{
-		RigidBody->Velocity.Y -= JumpAmount;
-		RigidBody->IsGrounded = FALSE;
-	}
-
 	virtual void OnCollisionStart(const Collision& Collide) override
 	{
+
 	}
 
 	inline virtual void Awake() override {};
@@ -1309,28 +972,44 @@ class Tile : public GameBehaviour
 public:
 
 	SpriteRenderer* EntRenderer;
+
 	SDL_Texture* TileSet;
+	Vector2 TileSetPosition;
 
 	inline Tile()
 	{
+
 	}
 
-	inline Tile(SDL_Texture* TileSetTexture, Vector2 TilePosition, Vector2 TileSetPosition, Vector2 TileSetSize)
+	inline Tile(SDL_Texture* TileSetTexture, Vector2 TileSize, Vector2 TileSetTexturePosition, Vector2 TilePosition)
 	{
 		Name = "Tile";
 		TileSet = TileSetTexture;
+		Size = TileSize;
+		TileSetPosition = TileSetTexturePosition;
+		Position = TilePosition;
+
+		EntityAttachedTo->EntTransform.Position = TilePosition;
 
 		EntityAttachedTo = new GameEntity("Tile");
 		EntityAttachedTo->EntTransform.Position = TilePosition;
-		EntityAttachedTo->EntTransform.Scale = Vector2(1.0f, 1.0f);
-
+		
 		EntRenderer = EntityAttachedTo->AddComponent<SpriteRenderer>();
 		EntRenderer->SpriteToRender.SpriteSheet = TileSetTexture;
-		EntRenderer->SpriteToRender.TextureRect = KRectangle(TileSetPosition, TileSetSize);
+		EntRenderer->SpriteToRender.TextureRect = BoundingBox( TileSetPosition + (Size * 0.5f), Size );
 	}
 
 	inline void Update() override
 	{
+
+	}
+
+	inline void Draw()
+	{
+		SDL_Rect DestinationRect = { (int32)Position.X, (int32)Position.Y, (int32)Size.X, (int32)Size.Y };
+		SDL_Rect SourceRect = { (int32)TileSetPosition.X, (int32)TileSetPosition.Y, (int32)Size.X, (int32)Size.Y };
+
+		RenderManager::CurrentRenderer->BlitSurface(TileSet, &SourceRect, &DestinationRect);
 	}
 };
 
@@ -1346,18 +1025,16 @@ public:
 
 	inline PhysicsTile()
 	{
+		
 	}
 
-	inline PhysicsTile(SDL_Texture* TileSetTexture, BoundingBox PhysicsBox, Vector2 TileSetPosition, Vector2 TileSetTextureMin, Vector2 TileSetTextureMax) :
-		Tile(TileSetTexture, TileSetPosition, TileSetTextureMin, TileSetTextureMax)
+	inline PhysicsTile(SDL_Texture* TileSetTexture, BoundingBox Box, Vector2 TileSetTexturePosition) :
+		Tile(TileSetTexture, Box.GetSize(), TileSetTexturePosition, Box.GetPosition())
 	{
-		Name = "PhysicalTile";
-		EntityAttachedTo->Name = "PhysicsTile";
 		Collider = EntityAttachedTo->AddComponent<BoxCollider>();
 		//Collider->Bounds.X = (uint32)TilePosition.X;
 		//Collider->Bounds.Y = (uint32)TilePosition.Y;
-		Collider->Bounds = PhysicsBox;
-		EntRenderer->SpriteToRender.Bounds = PhysicsBox;
+		Collider->Bounds = EntRenderer->SpriteToRender.TextureRect;
 		// Collider->Bounds.X = 0;
 		// Collider->Bounds.Y = 0;
 		// Collider->Bounds.Width = (uint32)TileSize.X;
@@ -1397,9 +1074,10 @@ public:
 
 	SDL_Texture* BackgroundTexture;
 
-	std::vector<GameEntity*> SlopeList;
 	std::vector<Tile*> TileList;
 	std::vector<Tileset> TileSets;
+
+	std::vector<BoundingBox> CollisionRectangles;
 
 public:
 
@@ -1407,6 +1085,7 @@ public:
 
 	inline Level()
 	{
+
 	}
 
 	inline Level(string LevelMapName, Vector2 LevelSpawnPoint)
@@ -1426,17 +1105,154 @@ public:
 		LoadMapFile(FileName);
 	}
 
-	inline void LoadMapFile(string LevelMapName);
+	inline void LoadMapFile(string LevelMapName)
+	{
+		SDL_RWops* File = SDL_RWFromFile(LevelMapName.c_str(), "rb");
 
-	inline void LoadMap(string LevelMapName);
+		const int64 FileSize = (int64)File->size;
+		char* Buffer = (char *)malloc(FileSize * sizeof(char));
+		File->read(File, Buffer, FileSize * sizeof(char), 1);
+
+		string FileContents = Buffer;
+
+		uint32 Width = 0, Height = 0, TileWidth = 0, TileHeight = 0;
+
+		nlohmann::json JsonFile = nlohmann::json::parse(FileContents.c_str());
+
+		MapName = JsonFile["tilesets"][0]["name"].get<string>();
+
+		Width = JsonFile["width"].get<uint32>();
+		Height = JsonFile["height"].get<uint32>();
+
+		TileWidth = JsonFile["tilewidth"].get<uint32>();
+		TileHeight = JsonFile["tileheight"].get<uint32>();
+
+		LevelSize = Vector2(Width, Height);
+
+		string ImageUsed = JsonFile["tilesets"][0]["image"].get<string>();
+
+		uint32 FirstGID = JsonFile["tilesets"][0]["firstgid"].get<uint32>();
+
+		ImageUsed = ImageUsed.substr(ImageUsed.find_first_of('/'));
+		ImageUsed = "../Data/" + ImageUsed;
+
+		SDL_Texture* Texture = SDL_CreateTextureFromSurface(RenderManager::CurrentRenderer->SDLRenderer,
+			RenderManager::CurrentRenderer->LoadImage(ImageUsed));
+
+		TileSets.push_back(Tileset(Texture, FirstGID));
+
+		nlohmann::json LayerList = nlohmann::json(JsonFile["layers"]);
+
+		for (uint32 LayerIndex = 0; LayerIndex < LayerList.size(); ++LayerIndex)
+		{
+			if (LayerList[LayerIndex]["name"].get<string>() == "Collisions")
+			{
+				for (uint32 ObjectIndex = 0; ObjectIndex < LayerList[LayerIndex]["objects"].size(); ++ObjectIndex)
+				{
+					real32 NewTileX = LayerList[LayerIndex]["objects"][ObjectIndex]["x"].get<real32>();
+					real32 NewTileY = LayerList[LayerIndex]["objects"][ObjectIndex]["y"].get<real32>();
+					real32 NewTileWidth = LayerList[LayerIndex]["objects"][ObjectIndex]["width"].get<real32>();
+					real32 NewTileHeight = LayerList[LayerIndex]["objects"][ObjectIndex]["height"].get<real32>();
+
+					Vector2 Pos = { NewTileX , NewTileY };
+					Vector2 Size = { NewTileWidth, NewTileHeight };
+
+					CollisionRectangles.push_back(BoundingBox(Pos, Size));
+				}
+			}
+			else if (LayerList[LayerIndex]["name"].get<string>() == "Background" || 
+				LayerList[LayerIndex]["name"].get<string>() == "Foreground")
+			{
+				
+
+				std::vector<uint32> TileData = LayerList[LayerIndex]["data"].get<std::vector<uint32>>();
+
+				for (uint32 TileIndex = 0; TileIndex < TileData.size(); ++TileIndex)
+				{
+					uint32 GID = TileData[TileIndex];
+
+					if (GID == 0)
+					{
+						continue;
+					}
+
+					Tileset Set;
+
+					for (uint32 TileSetIndex = 0; TileSetIndex < TileSets.size(); ++TileSetIndex)
+					{
+						if (TileSets[TileSetIndex].FirstGID <= (int32)GID)
+						{
+							Set = TileSets.at(TileSetIndex);
+							break;
+						}
+					}
+
+					uint32 XX = 0;
+					uint32 YY = 0;
+
+					XX = TileIndex % Width;
+					XX *= TileWidth;
+					YY += TileHeight * (TileIndex / Width);
+
+					Vector2 FinalTilePosition = Vector2(XX, YY);
+
+					uint32 TileSetWidth, TileSetHeight;
+					SDL_QueryTexture(Set.Texture, NULL, NULL, (int *)&TileSetWidth, (int *)&TileSetHeight);
+					uint32 TSXX = GID % (TileSetWidth / TileWidth) - 1;
+					TSXX *= TileWidth;
+
+					uint32 TSYY = 0;
+					uint32 Amount = (GID / (TileSetWidth / TileWidth));
+
+					TSYY = TileHeight * Amount;
+
+					Vector2 FinalTileSetPosition = Vector2(TSXX, TSYY);
+
+					Tile* BuildTile = new Tile(Set.Texture, Vector2(TileWidth, TileHeight), FinalTileSetPosition, FinalTilePosition);
+					TileList.push_back(BuildTile);
+				}
+			}
+			else if (LayerList[LayerIndex]["name"].get<string>() == "Slopes")
+			{
+				// std::vector<> Slopes;
+
+				for (auto& Item : LayerList[LayerIndex]["objects"])
+				{
+					// Item.get<string>();
+				}
+			}
+		}
+
+		SDL_Texture* DebugTexture = SDL_CreateTextureFromSurface(RenderManager::CurrentRenderer->SDLRenderer,
+			RenderManager::CurrentRenderer->LoadImage("../Data/Images/Debug/Collider.png"));
+
+		for (uint32 CollisionIndex = 0; CollisionIndex < CollisionRectangles.size(); ++CollisionIndex)
+		{
+			BoundingBox Rect = CollisionRectangles[CollisionIndex];
+			// TODO(Julian): Find a way to get rid of the texture object
+			PhysicsTile* PhysicalTile = new PhysicsTile(DebugTexture, Rect, Vector2::Zero);
+
+			TileList.push_back(PhysicalTile);
+		}
+	}
+
+	inline void LoadMap(string LevelMapName)
+	{
+		BackgroundTexture = SDL_CreateTextureFromSurface(RenderManager::CurrentRenderer->SDLRenderer,
+			RenderManager::CurrentRenderer->LoadImage("../Data/Images/bkBlue.bmp"));
+		LevelSize = Vector2(1280, 960);
+	}
 
 	inline virtual void Update() override
 	{
+
 	}
 
 	inline void Draw()
 	{
 	}
+
+
 };
 
 #define KANTI2D_GAMEOBJECT

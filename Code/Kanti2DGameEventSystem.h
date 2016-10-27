@@ -52,23 +52,15 @@ public:
 	}
 };
 
-k_internal const Point CellSize = { 500, 500 };
+k_internal const Point CellSize = { 640, 480 };
 
 struct CollisionPair
 {
-	class Collider* Caller;
-	struct Collision* InfoCaller;
-
-	class Collider* Collider;
-	struct Collision* InfoCollider;
-
-	CollisionPair(class Collider& A, class Collider& B);
+	struct Collision InfoCaller;
 
 	CollisionPair(class Collider* A, class Collider* B);
 
-	CollisionPair(struct Collision& A, struct Collision& B);
-
-	CollisionPair(struct Collision* A, struct Collision* B);
+	void Update();
 
 	void CallCollisionStart();
 
@@ -76,43 +68,70 @@ struct CollisionPair
 
 	void CallCollisionEnd();
 
-	bool operator == (const CollisionPair& Other)
+	bool operator == (const CollisionPair& Other) const
 	{
-		return Caller == Other.Caller &&
-			Collider == Other.Collider;
+		return InfoCaller.Caller == Other.InfoCaller.Caller &&
+			InfoCaller.Collider == Other.InfoCaller.Collider;
 	}
 };
 
-class CollisionCell
+volatile class CollisionCell
 {
 public:
 	
-	string ID;
-	KRectangle Bounds;
-	std::thread* UpdateThread = nullptr;
+	UniqueID ID;
+	BoundingBox Bounds;
 	std::vector<class Collider*> Colliders;
 	std::vector<CollisionPair> CollisionPairs;
+	std::vector<CollisionPair> RemovedPairs;
 
 	inline CollisionCell()
 	{
-
+		ID = GetUUID();
 	}
 
-	inline CollisionCell(string CellID, KRectangle CellBounds)
+	inline CollisionCell(BoundingBox CellBounds)
 	{
-		ID = CellID;
+		ID = GetUUID();
 		Bounds = CellBounds;
 	}
 
-	inline bool operator ==(const CollisionCell& Comparer)
+	inline bool32 operator ==(const CollisionCell& Comparer)
 	{
-		return ID == Comparer.ID &&
+		return ID == Comparer.ID; /* &&
 			Bounds == Comparer.Bounds &&
 			UpdateThread == Comparer.UpdateThread &&
+			Colliders == Comparer.Colliders; // && CollisionPairs == Comparer.CollisionPairs;
+			*/
+	}
+
+	inline bool32 operator ==(const CollisionCell& Comparer) const
+	{
+		return ID == Comparer.ID &&
+			// Bounds == Comparer.Bounds &&
+			// UpdateThread == Comparer.UpdateThread &&
 			Colliders == Comparer.Colliders; // && CollisionPairs == Comparer.CollisionPairs;
 	}
 
 	void Update();
+
+	void UpdateRemovals()
+	{
+		if (RemovedPairs.size() == 0)
+		{
+			return;
+		}
+
+		for (auto Pair : RemovedPairs)
+		{
+			auto FoundPair = std::find(CollisionPairs.begin(), CollisionPairs.end(), Pair);
+
+			if (FoundPair != CollisionPairs.end())
+			{
+				CollisionPairs.erase(FoundPair);
+			}
+		}
+	}
 };
 
 volatile class GameEventSystem
@@ -125,15 +144,15 @@ public:
 
 	std::map<string, class GameEntity*> GameEntities;
 
-	std::vector<class Behaviour*> UpdateCalls;
-	std::vector<class Behaviour*> FixedUpdateCalls;
+	std::vector<class GameBehaviour*> UpdateCalls;
+	std::vector<class GameBehaviour*> FixedUpdateCalls;
 	std::vector<class Renderer*> DrawCalls;
 
 	// TODO(Julian): THink about combining these
 	std::vector<class PhysicsComponent*> PhysicsCalls;
 	std::vector<class Collider*> CollisionCalls;
 
-	std::map<string, class CollisionCell> CollisionCells;
+	std::map<struct UniqueID, class CollisionCell> CollisionCells;
 
 	
 	// k_internal std::vector<std::function<void(Collider2D*)>> CollisionCalls;
@@ -143,7 +162,7 @@ public:
 
 	// Functions
 
-	void AddUpdateHandler(class Behaviour* Callback)
+	void AddUpdateHandler(class GameBehaviour* Callback)
 	{
 		if (!Callback)
 		{
@@ -162,7 +181,7 @@ public:
 		}
 	}
 
-	void AddFixedUpdateHandler(class Behaviour* Callback)
+	void AddFixedUpdateHandler(class GameBehaviour* Callback)
 	{
 		if (!Callback)
 		{
@@ -238,17 +257,19 @@ public:
 		}
 	}
 
-	void CreateCollisionCells(KRectangle WindowSize)
+	void CreateCollisionCells(Vector2 WindowSize)
 	{
-		uint32 CellCount = 0;
-		for (int32 IndexWidth = 0; IndexWidth < WindowSize.Width; IndexWidth += CellSize.X)
+		for (int32 IndexWidth = 0; IndexWidth < WindowSize.X; IndexWidth += CellSize.X)
 		{
-			for (int32 IndexHeight = 0; IndexHeight < WindowSize.Height; IndexHeight += CellSize.Y)
+			for (int32 IndexHeight = 0; IndexHeight < WindowSize.Y; IndexHeight += CellSize.Y)
 			{
-				Point CellPoint = { IndexWidth, IndexHeight };
-
-				KRectangle Bounds = KRectangle(IndexWidth, IndexHeight, CellSize.X, CellSize.Y);
-				CollisionCells[CellPoint.ToString()] = CollisionCell(CellPoint.ToString(), Bounds);
+				Vector2 Position = { IndexWidth, IndexHeight };
+				Vector2 Size = { CellSize.X, CellSize.Y };
+				BoundingBox Bounds = BoundingBox::GetPositionSize(Position, Size);
+				CollisionCell Cell(Bounds);
+				UniqueID ID = GetUUID();
+				CollisionCells[ID] = CollisionCell(Bounds);
+				CollisionCells[ID].ID = ID;
 				//std::pair<Point, CollisionCell*> Pair = { CellPoint, new CollisionCell(Cell) };
 				//CollisionCells.insert(Pair);
 			}

@@ -21,15 +21,21 @@ enum class TASK_STATUS : int32
 
 struct Task
 {
+	string Name;
 	struct Worker* WorkerAssigned;
-	// SDL_ThreadFunction TaskToComplete;
 	std::function<void(void**)> TaskToComplete = nullptr;
 	void** PassedData;
 
-	bool32 Finished = true;
+	bool32 Finished = FALSE;
 
 	Task()
 	{
+		Name = "NULL";
+	}
+
+	Task(string TaskName)
+	{
+		Name = TaskName;
 	}
 };
 
@@ -52,21 +58,29 @@ struct Worker
 	{
 	}
 
-	inline void Assign(Task& CurrentTask)
+	inline void Assign(Task* CurrentTask)
 	{
-		AssignedTask = new Task(CurrentTask);
+		AssignedTask = CurrentTask;
 		AssignedTask->WorkerAssigned = this;
 		AssignedTask->Finished = FALSE;
 	}
 
 	inline void Update()
 	{
+		if (!AssignedTask)
+		{
+			Status = TASK_STATUS::NOTSTARTED;
+			IsBusy = FALSE;
+			return;
+		}
+
 		if (Status == TASK_STATUS::FINISHED)
 		{
 			IsBusy = FALSE;
 			Status = TASK_STATUS::NOTSTARTED;
 			AssignedTask->Finished = TRUE;
 			AssignedTask = nullptr;
+			return;
 		}
 
 		Status = TASK_STATUS::RUNNING;
@@ -76,19 +90,10 @@ struct Worker
 		// WorkerThread = SDL_CreateThread(AssignedTask.TaskToComplete, WorkerName.c_str(), AssignedTask.PassedData);
 		// SDL_WaitThread(WorkerThread, (int32 *)&Status);
 
-		if (WorkerThread.native_handle())
+		if (!WorkerThread.joinable())
 		{
-			return;
+			WorkerThread = std::thread(AssignedTask->TaskToComplete, AssignedTask->PassedData);
 		}
-
-		if (!AssignedTask)
-		{
-			Status = TASK_STATUS::NOTSTARTED;
-			IsBusy = FALSE;
-			return;
-		}
-
-		WorkerThread = std::thread(AssignedTask->TaskToComplete, AssignedTask->PassedData);
 	}
 };
 
@@ -103,7 +108,7 @@ public:
 	// need to keep track of threads so we can join them
 	std::vector<Worker> Workers;
 	// the task queue
-	std::queue<Task> Tasks;
+	std::deque<Task*> Tasks;
 
 	// SDL
 	// synchronization
@@ -141,7 +146,7 @@ public:
 		}
 	}
 
-	void AddTask(Task& Assignment)
+	void AddTask(Task* Assignment)
 	{
 		/*
 		std::function<void()> task;
@@ -181,12 +186,20 @@ public:
 	return res;
 		*/
 
-		if (Assignment.Finished)
+		if (Assignment->Finished)
 		{
-			Assignment.Finished = FALSE;
+			Assignment->Finished = FALSE;
 		}
 
-		Tasks.push(Assignment);
+		for (int Index = 0; Index < Tasks.size(); ++Index)
+		{
+			if (Tasks[Index]->Name == Assignment->Name)
+			{
+				return;
+			}
+		}
+
+		Tasks.push_back(Assignment);
 	}
 
 	bool32 GetFirstWorker(Worker** FoundWorker)
@@ -206,7 +219,7 @@ public:
 		return FALSE;
 	}
 
-	bool32 TryAssignTask(Task& Assignment)
+	bool32 TryAssignTask(Task* Assignment)
 	{
 		Worker* FoundWorker = 0;
 		if (GetFirstWorker(&FoundWorker))
@@ -237,10 +250,10 @@ public:
 	{
 		while (Tasks.size() != 0)
 		{
-			Task FrontTask = Tasks.front();
+			Task* FrontTask = Tasks.front();
 			if (TryAssignTask(FrontTask))
 			{
-				Tasks.pop();
+				Tasks.pop_front();
 			}
 			else
 			{
@@ -266,7 +279,6 @@ public:
 
 	k_internal GameUpdateManager* Instance;
 
-	std::vector<Task> GameTasks;
 	Task GameUpdateTask;
 	Task GameFixedUpdateTask;
 	Task GamePhysicsUpdateTask;
@@ -280,7 +292,18 @@ public:
 		if (!Instance)
 		{
 			Instance = this;
+			SetupGameUpdate();
 		}
+	}
+
+	void SetupGameUpdate()
+	{
+		// Setup to run the first time
+		GameUpdateTask.Finished = TRUE;
+		GameFixedUpdateTask.Finished = TRUE;
+		GamePhysicsUpdateTask.Finished = TRUE;
+		GameCollisionUpdateTask.Finished = TRUE;
+		GameDrawUpdateTask.Finished = TRUE;
 	}
 
 	void OnGameUpdate()
@@ -291,7 +314,8 @@ public:
 			GameUpdateTask.TaskToComplete = UpdateThreadFunction;
 			GameUpdateTask.PassedData = (void **)&GameEventSystem::EventSystem;
 			GameUpdateTask.Finished = FALSE;
-			GameTasks.push_back(GameUpdateTask);
+			GameUpdateTask.Name = "Update";
+			ThreadManager::Instance->AddTask(&GameUpdateTask);
 		}
 
 		local_persist real64 FixedCount = 0.0;
@@ -310,7 +334,8 @@ public:
 			GameFixedUpdateTask.TaskToComplete = FixedUpdateThreadFunction;
 			GameFixedUpdateTask.PassedData = (void **)&GameEventSystem::EventSystem;
 			GameFixedUpdateTask.Finished = FALSE;
-			GameTasks.push_back(GameFixedUpdateTask);
+			GameFixedUpdateTask.Name = "FixedUpdate";
+			ThreadManager::Instance->AddTask(&GameFixedUpdateTask);
 		}
 
 		// Physics
@@ -319,7 +344,8 @@ public:
 			GamePhysicsUpdateTask.TaskToComplete = PhysicsUpdateThreadFunction;
 			GamePhysicsUpdateTask.PassedData = (void **)&GameEventSystem::EventSystem;
 			GamePhysicsUpdateTask.Finished = FALSE;
-			GameTasks.push_back(GamePhysicsUpdateTask);
+			GamePhysicsUpdateTask.Name = "Physics";
+			ThreadManager::Instance->AddTask(&GamePhysicsUpdateTask);
 		}
 
 		// Collision
@@ -328,7 +354,8 @@ public:
 			GameCollisionUpdateTask.TaskToComplete = CollisionUpdateThreadFunction;
 			GameCollisionUpdateTask.PassedData = (void **)&GameEventSystem::EventSystem;
 			GameCollisionUpdateTask.Finished = FALSE;
-			GameTasks.push_back(GameCollisionUpdateTask);
+			GameCollisionUpdateTask.Name = "Collision";
+			ThreadManager::Instance->AddTask(&GameCollisionUpdateTask);
 		}
 
 		// Draw
@@ -337,15 +364,8 @@ public:
 			GameDrawUpdateTask.TaskToComplete = DrawThreadFunction;
 			GameDrawUpdateTask.PassedData = (void **)&GameEventSystem::EventSystem;
 			GameDrawUpdateTask.Finished = FALSE;
-			GameTasks.push_back(GameDrawUpdateTask);
-		}
-
-		for (auto& Assignment : GameTasks)
-		{
-			if (!Assignment.Finished)
-			{
-				ThreadManager::Instance->AddTask(Assignment);
-			}
+			GameDrawUpdateTask.Name = "Draw";
+			ThreadManager::Instance->AddTask(&GameDrawUpdateTask);
 		}
 	}
 };
@@ -409,40 +429,33 @@ k_internal inline void CollisionUpdateThreadFunction(void** PointerReference)
 
 	for (const auto& Collider : (*EventSystem)->CollisionCalls)
 	{
-		if (Collider->CellIndex == "NULL")
+		if (Collider->CellIndex == nullptr)
 		{
-			Point Index = { (int32)Collider->GetBoundsCombined()->GetCombinedOffset().X, (int32)Collider->GetBoundsCombined()->GetCombinedOffset().Y };
+			for (auto& Cell : (*EventSystem)->CollisionCells)
+			{
+				if (Cell.second.Bounds.Intersects(Collider->GetBounds()))
+				{
+					Collider->CellIndex = &Cell.second.ID;
 
-			Index.X -= Index.X % CellSize.X;
-			Index.Y -= Index.Y % CellSize.Y;
-
-			Collider->CellIndex = Index.ToString();
-
-			(*EventSystem)->CollisionCells[Index.ToString()].Colliders.push_back(Collider);
+					Cell.second.Colliders.push_back(Collider);
+				}
+			}
 		}
 	}
 
 	for (auto& Cell : (*EventSystem)->CollisionCells)
 	{
-		// Cell.second->Update();
-
-		if (Cell.second.UpdateThread)
+		if (Cell.second.Colliders.size() == 0 && Cell.second.CollisionPairs.size() == 0)
 		{
-			if (Cell.second.UpdateThread->joinable())
-			{
-				Cell.second.UpdateThread->join();
-				Cell.second.UpdateThread = nullptr;
-			}
-		}
-		else
-		{
-			if (Cell.second.Colliders.size() == 0 && Cell.second.CollisionPairs.size() == 0)
-			{
 				continue;
-			}
-
-			Cell.second.UpdateThread = new std::thread(UpdateCollisionCellsFunction, (void **)&Cell.second);
 		}
+
+		Task CellUpdate;
+		CellUpdate.Finished = FALSE;
+		CellUpdate.Name = "CellUpdate " + Cell.second.ID.ToString();
+		CellUpdate.PassedData = (void **)&Cell.second;
+		CellUpdate.TaskToComplete = UpdateCollisionCellsFunction;
+		ThreadManager::Instance->AddTask(new Task(CellUpdate));
 	}
 
 	/*
@@ -466,8 +479,8 @@ k_internal inline void CollisionUpdateThreadFunction(void** PointerReference)
 
 			for (auto const& Active : ActiveList)
 			{
-				KRectangle IterBounds = Iterator->GetBoundsCombined();
-				KRectangle ActiveBounds = Active->GetBoundsCombined();
+				BoundingBox IterBounds = Iterator->GetBoundsCombined();
+				BoundingBox ActiveBounds = Active->GetBoundsCombined();
 
 				if (IterBounds.GetLeft() > ActiveBounds.GetRight())
 				{

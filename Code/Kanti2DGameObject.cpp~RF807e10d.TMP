@@ -227,7 +227,7 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxBottom, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.Y = -1.0f;
 				// Info.Normal.Y = Contact.Normal.Y;
 				Info.Contacts.push_back(Contact);
 			}

@@ -30,9 +30,7 @@ typedef uintptr_t uintptr;
 
 class Vector2;
 
-// class Vector3;
-
-// class Vector4;
+struct UniqueID;
 
 #define Real32Maximum FLT_MAX
 #define Real32Minimum -FLT_MAX

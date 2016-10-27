@@ -14,8 +14,111 @@ public:
 	{
 	}
 
+	inline void TestCases()
+	{
+
+		{
+			Segment s = { { 1, 8 },{ 7, 5 } };
+			BoundingBox r = { { 5, 4 },{ 3, 2 }, 30 };
+
+			bool32 Result = Collider::oriented_rectangle_segment_collide(r, s);
+
+			Assert(Result == TRUE);
+		}
+
+		{
+			Segment A = { { 157, 222 }, { 157 + 69, 222 + 35 } };
+			BoundingBox B;
+
+			B = BoundingBox::GetPositionSize({ 161.0f, 243.0f }, { 42.0f, 64.0f });
+			B.Rotation = 0.0f;
+
+			bool32 ResultA = Collider::oriented_rectangle_segment_collide(B, A);
+			Assert(TRUE == ResultA);
+		}
+
+		{
+			Vector2 a = { 8, 2 };
+			Vector2 b = { -2, 8 };
+			Vector2 c = { -5, 5 };
+			Assert(0.0f == Vector2::DotProduct(a, b));
+			Assert(0.0f > Vector2::DotProduct(a, c));
+			Assert(0.0f < Vector2::DotProduct(b, c));
+		}
+
+		{
+			Vector2 a = { 8, 2 };
+			Vector2 b = { -2, 8 };
+			Assert(90.0f == Vector2::EnclosedAngle(a, b));
+			Assert(0.0f == Vector2::DotProduct(a, b));
+
+		}
+
+		{
+			KRectangle a = { { 1, 1 },{ 4, 4 } }; 
+			KRectangle b = { { 2, 2 },{ 5, 5 } };
+			KRectangle c = { { 6, 4 },{ 4, 2 } };
+			Assert(TRUE == Collider::rectangles_collide(a, b));
+			Assert(TRUE == Collider::rectangles_collide(b, c));
+			Assert(FALSE == Collider::rectangles_collide(a, c));
+		}
+
+		{
+			Vector2 a = { 2, 3 };
+			Vector2 b = { 2, 3 };
+			Vector2 c = { 3, 4 };
+			Assert(TRUE == Collider::points_collide(a, b));
+			Assert(FALSE == Collider::points_collide(a, c));
+			Assert(FALSE == Collider::points_collide(b, c));
+		}
+
+		{
+			Vector2 a = { 3, 5 };
+			Vector2 b = { 3, 2 };
+			Vector2 c = { 8, 4 };
+			Vector2 down = { 5, -1 };
+			Vector2 up = { 5, 2 };
+
+			Ray l1 = { a, down };
+
+			Ray l2 = { a, up };
+			Ray l3 = { b, up };
+			Ray l4 = { c, down };
+
+			Assert(TRUE == Ray::RayCollides(l1, l2));
+			Assert(TRUE == Ray::RayCollides(l1, l3));
+			Assert(FALSE == Ray::RayCollides(l2, l3));
+			Assert(TRUE == Ray::RayCollides(l1, l4));
+
+		}
+
+		{
+			Vector2 a = { 3, 4 };
+			Vector2 b = { 11, 1 };
+			Vector2 c = { 8, 4 };
+			Vector2 d = { 11, 7 };
+			Segment s1 = { a, b };
+
+			Segment s2 = { c, d }; 
+			Assert(FALSE == Segment::IsColliding(s1, s2));
+		}
+
+		{
+			BoundingBox a = { { 3, 5 },{ 1, 3 }, 15 };
+			BoundingBox b = { { 10, 5 },{ 2, 2 }, -15 };
+			// Assert(FALSE == Collider::(a, b));
+
+		}
+
+		{
+
+		}
+	}
+
 	inline void GameLoop()
 	{
+		TestCases();
+
 		// GameEventSystem::EventSystem = new GameEventSystem();
 		RenderManager::CurrentRenderer->CreateWindow(Vector2(640, 480), "CaveStory");
 		Input GameInput;
@@ -41,7 +144,7 @@ public:
 
 		ThreadManager::Instance = new ThreadManager();
 
-		GameEventSystem::EventSystem->CreateCollisionCells(KRectangle(0, 0, 640, 480));
+		GameEventSystem::EventSystem->CreateCollisionCells( Vector2(640, 480));
 
 		while (true)
 		{
@@ -74,6 +177,11 @@ public:
 			if (GameInput.WasKeyPressed(SDL_SCANCODE_1))
 			{
 				GameAudio.PlayMusic("../Data/Music/sf1_intro_3.mid", false, true);
+			}
+
+			if (GameInput.WasKeyPressed(SDL_SCANCODE_SPACE))
+			{
+				Character->Jump();
 			}
 
 			if (GameInput.IsKeyHeld(SDL_SCANCODE_LEFT))

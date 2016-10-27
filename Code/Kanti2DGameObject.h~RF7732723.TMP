@@ -35,9 +35,6 @@ struct Collision
 	inline Collision() {};
 
 	Collision(class Collider* CalledOnCollider, class Collider* IncomingCollider);
-
-	// Assumes that they're already confirmed colliding
-	k_internal inline void GetCollisionInfo(class Collider* Caller, class Collider* Collided, struct Collision& Info);
 };
 
 class Entity
@@ -481,33 +478,6 @@ public:
 
 		return rectangle_segment_collide(lr, ls);
 	}
-
-	k_internal bool32 overlapping(real32 minA, real32 maxA, real32 minB, real32 maxB)
-	{ 
-		return minB <= maxA && minA <= maxB; 
-	}
-
-	k_internal bool32 rectangles_collide(KRectangle a, KRectangle b)
-	{
-		real32 aLeft = a.Position.X;
-		real32 aRight = aLeft + a.Size.X;
-		real32 bLeft = b.Position.X;
-		real32 bRight = bLeft + b.Size.X;
-		real32 aBottom = a.Position.Y;
-		real32 aTop = aBottom + a.Size.Y;
-
-		float bBottom = b.Position.Y;
-		float bTop = bBottom + b.Size.Y;
-
-		return overlapping(aLeft, aRight, bLeft, bRight) && overlapping(aBottom, aTop, bBottom, bTop);
-	}
-
-	k_internal bool32 points_collide(Vector2 a, Vector2 b) 
-	{ 
-		return a.X == b.X && a.Y == b.Y; 
-	}
-
-
 };
 
 class BoxCollider : public Collider
@@ -605,7 +575,7 @@ public:
 	{
 		Vector2 Result = Points[Index];
 
-		Result += EntityAttachedTo->EntTransform.Position + Offset;
+		Result += EntityAttachedTo->EntTransform.Position;
 
 		return (Result);
 	}
@@ -635,11 +605,6 @@ public:
 	{
 		if (GetBounds().Intersects(Collided->GetBounds()))
 		{
-			if (Collided->EntityAttachedTo->Name == "Player")
-			{
-				// __debugbreak();
-			}
-
 			for (auto Seg : GetSegments())
 			{
 				if (oriented_rectangle_segment_collide(Collided->GetBounds(), Seg))
@@ -647,8 +612,6 @@ public:
 					return TRUE;
 				}
 			}
-
-			return FALSE;
 
 			Vector2 Start = Points[0], DeltaEnd = Points[Points.size() - 1];
 			real32 PaddingX = 0;
@@ -771,6 +734,205 @@ public:
 		return Bounds;
 	}
 };
+
+// Assumes that they're already confirmed colliding
+k_internal inline void GetCollisionInfo(Collider* Caller, Collider* Collided, struct Collision& Info)
+{
+	Info.Caller = Caller;
+	Info.Collider = Collided;
+
+	// First we need to get the initial bounds collision
+	// as in top left right bottom
+	// then we can get a more precise collision
+
+	BoundingBox Ours = Caller->GetBounds();
+	BoundingBox Box = Collided->GetBounds();
+
+	real32 DeltaX = Box.Center.X - Ours.Center.X;
+	real32 PixelX = (Box.Extents.X + Ours.Extents.X) - AbsoluteValue(DeltaX);
+
+	real32 DeltaY = Box.Center.Y - Ours.Center.Y;
+	real32 PixelY = (Box.Extents.Y + Ours.Extents.Y) - AbsoluteValue(DeltaY);
+
+	// Vector2 ClosestPoint = Ours.ClosestPoint(Box.Center);
+
+	ContactPoint InitialContact;
+	if (PixelX < PixelY)
+	{
+		real32 SurfaceX = SignOf(DeltaX);
+		Info.RelativeVelocity.X = PixelX * SurfaceX;
+		Info.Normal.X = SurfaceX;
+
+		InitialContact.Normal.X = SurfaceX;
+		InitialContact.Point.X = Ours.Center.X + (Ours.Extents.X * SurfaceX);
+		InitialContact.Point.Y = Box.Center.Y;
+		Info.Contacts.push_back(InitialContact);
+	}
+	else
+	{
+		real32 SurfaceY = SignOf(DeltaY);
+		Info.RelativeVelocity.Y = PixelY * SurfaceY;
+		Info.Normal.Y = SurfaceY;
+
+		InitialContact.Normal.Y = SurfaceY;
+		InitialContact.Point.X = Box.Center.X;
+		InitialContact.Point.Y = Ours.Center.Y + (Ours.Extents.Y * SurfaceY);
+		Info.Contacts.push_back(InitialContact);
+	}
+
+	if (dynamic_cast<BoxCollider*>(Caller) && dynamic_cast<EdgeCollider*>(Collided))
+	{
+		BoxCollider* Box = dynamic_cast<BoxCollider*>(Caller);
+
+		EdgeCollider* Edge = dynamic_cast<EdgeCollider*>(Collided);
+
+		BoundingBox BoxBounds = Box->GetBounds();
+
+		Segment BoxLeft;
+		BoxLeft.PointA = BoxBounds.GetMin();
+		BoxLeft.PointB = { BoxLeft.PointA.X, BoxBounds.GetMax().Y };
+
+		Segment BoxBottom;
+		BoxBottom.PointA = BoxLeft.PointB;
+		BoxBottom.PointB = BoxBounds.GetMax();
+
+		Segment BoxRight;
+		BoxRight.PointA = BoxBottom.PointB;
+		BoxRight.PointB = { BoxBounds.GetMax().X, BoxBounds.GetMin().Y };
+
+		Segment BoxTop;
+		BoxTop.PointA = BoxLeft.PointA;
+		BoxTop.PointB = BoxRight.PointB;
+
+		for (auto Line : Edge->GetSegments())
+		{
+			if (Segment::GetIntersection(BoxLeft, Line) != Vector2::Zero)
+			{
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxLeft, Line);
+				Contact.Normal.X = -1.0f;
+				// Info.Normal.X = Contact.Normal.X;
+				Info.Contacts.push_back(Contact);
+			}
+
+			if (Segment::GetIntersection(BoxTop, Line) != Vector2::Zero)
+			{
+
+				if (Box->EntityAttachedTo->Name == "Player")
+				{
+					// __debugbreak();
+				}
+
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxTop, Line);
+				Contact.Normal.Y = 1.0f;
+				// Info.Normal.Y = Contact.Normal.Y;
+				Info.Contacts.push_back(Contact);
+			}
+			
+			if (Segment::GetIntersection(BoxRight, Line) != Vector2::Zero)
+			{
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxRight, Line);
+				Contact.Normal.X = 1.0f;
+				// Info.Normal.X = Contact.Normal.X;
+				Info.Contacts.push_back(Contact);
+			}
+			
+			if (Segment::GetIntersection(BoxBottom, Line) != Vector2::Zero)
+			{
+
+				if (Box->EntityAttachedTo->Name == "Player")
+				{
+					// __debugbreak();
+				}
+
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxBottom, Line);
+				Contact.Normal.Y = -1.0f;
+				// Info.Normal.Y = Contact.Normal.Y;
+				Info.Contacts.push_back(Contact);
+			}
+		}
+	}
+	else if (dynamic_cast<EdgeCollider*>(Caller) && dynamic_cast<BoxCollider*>(Collided))
+	{
+
+		BoxCollider* Box = dynamic_cast<BoxCollider*>(Collided);
+
+		if (Box->EntityAttachedTo->Name == "Player")
+		{
+			// __debugbreak();
+		}
+
+		EdgeCollider* Edge = dynamic_cast<EdgeCollider*>(Caller);
+
+		BoundingBox BoxBounds = Box->GetBounds();
+
+		Segment BoxLeft;
+		BoxLeft.PointA = BoxBounds.GetMin();
+		BoxLeft.PointB = { BoxLeft.PointA.X, BoxBounds.GetMax().Y };
+
+		Segment BoxBottom;
+		BoxBottom.PointA = BoxLeft.PointB;
+		BoxBottom.PointB = BoxBounds.GetMax();
+
+		Segment BoxRight;
+		BoxRight.PointA = BoxBottom.PointB;
+		BoxRight.PointB = { BoxBounds.GetMax().X, BoxBounds.GetMin().Y };
+
+		Segment BoxTop;
+		BoxTop.PointA = BoxLeft.PointA;
+		BoxTop.PointB = BoxRight.PointB;
+
+		for (auto Line : Edge->GetSegments())
+		{
+			// Vector2 Location;
+			// if (Segment::lines_intersect(BoxLeft, Line, Location) == DO_INTERSECT)
+
+
+			if (Segment::GetIntersection(BoxLeft, Line) != Vector2::Zero)
+			{
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxLeft, Line);
+				Contact.Normal.X = -1.0f;
+				Info.Normal.X = Contact.Normal.X;
+				Info.Contacts.push_back(Contact);
+			}
+
+			if (Segment::GetIntersection(BoxTop, Line) != Vector2::Zero)
+			{
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxTop, Line);
+				Contact.Normal.Y = 1.0f;
+				Info.Normal.Y = Contact.Normal.Y;
+				Info.Contacts.push_back(Contact);
+			}
+
+			if (Segment::GetIntersection(BoxRight, Line) != Vector2::Zero)
+			{
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxRight, Line);
+				Contact.Normal.X = 1.0f;
+				Info.Normal.X = Contact.Normal.X;
+				Info.Contacts.push_back(Contact);
+			}
+
+			if (Segment::GetIntersection(BoxBottom, Line) != Vector2::Zero)
+			{
+				ContactPoint Contact;
+				Contact.Point = Segment::GetIntersection(BoxBottom, Line);
+				Contact.Normal.Y = -1.0f;
+				Info.Normal.Y = Contact.Normal.Y;
+				Info.Contacts.push_back(Contact);
+			}
+		}
+	}
+	else if (dynamic_cast<BoxCollider*>(Caller) && dynamic_cast<BoxCollider*>(Collided))
+	{
+		// do stuff here
+	}
+}
 
 class SpriteRenderer : public Renderer
 {
@@ -977,48 +1139,16 @@ public:
 	{
 	}
 
-	inline void SlopeTest(const Collision& CollideInfo)
-	{
-		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		Vector2 Lowest = CollideInfo.Contacts[0].Point.Y;
-		int32 LowestIndex = 0;
-
-		if (CollideInfo.Contacts.size() > 1)
-		{
-			for (int32 Index = 0; Index < CollideInfo.Contacts.size(); ++Index)
-			{
-				if (Lowest.Y < CollideInfo.Contacts[Index].Point.Y)
-				{
-					Lowest = CollideInfo.Contacts[Index].Point;
-					LowestIndex = Index;
-				}
-			}
-		}
-
-		real32 Angle = Vector2::Angle(CollideInfo.Contacts[LowestIndex].Normal, EntTransform->Position) * RADIANS_CONSTANT;
-		// real32 Radians = ToRadians(Angle);
-
-		if (AbsoluteValue(Angle) < 30.0f)
-		{
-			EntTransform->Position.Y = Lowest.Y - BodyCollider->GetBounds().GetSize().Y;
-		}
-	}
-
 	inline virtual void OnCollisionStart(const Collision& CollideInfo) override
 	{
 		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
 
 		if (CollideInfo.Normal.Y > 0.0f)
 		{
 			IsGrounded = TRUE;
 			Ground = CollideInfo.Collider;
 			Velocity.Y = 0.0f;
-
-			
+			EntTransform->Position.Y = CollideInfo.Contacts[0].Point.Y - BodyCollider->GetBounds().GetSize().Y;
 		}
 		else if (CollideInfo.Normal.Y < 0.0f)
 		{
@@ -1050,15 +1180,13 @@ public:
 	{
 		Transform* EntTransform = &EntityAttachedTo->EntTransform;
 
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
-
 		if (CollideInfo.Normal.Y > 0.0f)
 		{
 			IsGrounded = TRUE;
 			Ground = CollideInfo.Collider;
 
 			Velocity.Y = 0.0f;
+			EntTransform->Position.Y = CollideInfo.Contacts[0].Point.Y - (BodyCollider->GetBounds().GetSize().Y);
 		}
 		else if (CollideInfo.Normal.Y < 0.0f)
 		{

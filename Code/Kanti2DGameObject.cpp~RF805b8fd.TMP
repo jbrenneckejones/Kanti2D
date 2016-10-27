@@ -127,16 +127,22 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxLeft, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal = Vector2::Rotate90Degrees(Contact.Point).Normalize();
 				// Info.Normal.X = Contact.Normal.X;
 				Info.Contacts.push_back(Contact);
 			}
 
 			if (Segment::GetIntersection(BoxTop, Line) != Vector2::Zero)
 			{
+
+				if (Box->EntityAttachedTo->Name == "Player")
+				{
+					// __debugbreak();
+				}
+
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxTop, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.Y = 1.0f;
 				// Info.Normal.Y = Contact.Normal.Y;
 				Info.Contacts.push_back(Contact);
 			}
@@ -145,16 +151,22 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxRight, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.X = 1.0f;
 				// Info.Normal.X = Contact.Normal.X;
 				Info.Contacts.push_back(Contact);
 			}
 
 			if (Segment::GetIntersection(BoxBottom, Line) != Vector2::Zero)
 			{
+
+				if (Box->EntityAttachedTo->Name == "Player")
+				{
+					// __debugbreak();
+				}
+
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxBottom, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.Y = -1.0f;
 				// Info.Normal.Y = Contact.Normal.Y;
 				Info.Contacts.push_back(Contact);
 			}
@@ -200,7 +212,7 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxLeft, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.X = -1.0f;
 				// Info.Normal.X = Contact.Normal.X;
 				Info.Contacts.push_back(Contact);
 			}
@@ -209,7 +221,7 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxTop, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.Y = 1.0f;
 				// Info.Normal.Y = Contact.Normal.Y;
 				Info.Contacts.push_back(Contact);
 			}
@@ -218,7 +230,7 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxRight, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.X = 1.0f;
 				// Info.Normal.X = Contact.Normal.X;
 				Info.Contacts.push_back(Contact);
 			}
@@ -227,7 +239,7 @@ void Collision::GetCollisionInfo(class Collider* Caller, class Collider* Collide
 			{
 				ContactPoint Contact;
 				Contact.Point = Segment::GetIntersection(BoxBottom, Line);
-				Contact.Normal = -Vector2::Rotate90Degrees(Contact.Point).Normalize();
+				Contact.Normal.Y = -1.0f;
 				// Info.Normal.Y = Contact.Normal.Y;
 				Info.Contacts.push_back(Contact);
 			}
