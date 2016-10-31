@@ -111,7 +111,50 @@ public:
 		}
 
 		{
+			Segment Slope;
+			Slope.PointA = { 0, 0 };
+			Slope.PointB = { 3, 3 };
 
+			KRectangle Rect;
+			Rect.Height = 1.0f;
+			Rect.Width = 1.0f;
+			Rect.X = 1.0f;
+			Rect.Y = 1.0f;
+
+			bool32 Result = Collider::rectangle_segment_collide(Rect, Slope);
+
+			Assert(Result == TRUE);
+
+			Segment BoxBottom;
+			BoxBottom.PointA = { Rect.GetLeft(), Rect.Size.Y };
+			BoxBottom.PointB = { Rect.GetRight(), Rect.Size.Y };
+
+			Segment BoxRight;
+			BoxRight.PointA = BoxBottom.PointB;
+			BoxRight.PointB = { Rect.GetRight(), Rect.GetBottom() };
+
+			ContactPoint ContactBottom;
+			if (Segment::GetIntersection(BoxBottom, Slope) != Vector2::Zero)
+			{
+				ContactBottom.Point = Segment::GetIntersection(BoxBottom, Slope);
+				ContactBottom.Normal = -Vector2::Rotate90Degrees(ContactBottom.Point).Normalize();
+			}
+
+			ContactPoint ContactRight;
+			if (Segment::GetIntersection(BoxRight, Slope) != Vector2::Zero)
+			{
+				ContactRight.Point = Segment::GetIntersection(BoxRight, Slope);
+				ContactRight.Normal = -Vector2::Rotate90Degrees(ContactRight.Point).Normalize();
+			}
+
+			Vector2 Average = (ContactBottom.Point + ContactRight.Point) / 2;
+
+			Vector2 TopLeft = { 1, 2 };
+
+			real32 Angle = Vector2::Angle(TopLeft, Average);
+
+
+			Assert(Average == Vector2(1.5f, 1.5f));
 		}
 	}
 
@@ -125,7 +168,12 @@ public:
 		Audio GameAudio;
 		SDL_Event Event;
 
-		Level* GameLevel; 
+		Level* GameLevel;
+
+		GameEntity LevelEntity = GameEntity();
+		GameLevel = new Level(&LevelEntity, "../Data/Levels/PrtCave.json");
+		LevelEntity.AddComponent<Level>(GameLevel);
+
 		Player* Character;
 
 		GameUpdateManager::Instance = new GameUpdateManager();
@@ -135,10 +183,6 @@ public:
 		Character = CurrentPlayer.AddComponent<Player>(new Player(&CurrentPlayer, Vector2(280, 252)));
 
 		// GameLevel = Level("Map 1", Vector2(100, 100), RenderGraphics);
-		
-		GameEntity LevelEntity = GameEntity();
-		GameLevel = new Level(&LevelEntity, "../Data/Levels/PrtCave.json");
-		LevelEntity.AddComponent<Level>(GameLevel);
 
 		Time::Initialize();
 
@@ -196,6 +240,11 @@ public:
 			if (!GameInput.IsKeyHeld(SDL_SCANCODE_LEFT) && !GameInput.IsKeyHeld(SDL_SCANCODE_RIGHT))
 			{
 				Character->StopMove();
+			}
+
+			if (!GameInput.WasKeyPressed(SDL_SCANCODE_SPACE))
+			{
+				Character->EndJump();
 			}
 
 			Vector2 Position = Character->EntityAttachedTo->EntTransform.Position;

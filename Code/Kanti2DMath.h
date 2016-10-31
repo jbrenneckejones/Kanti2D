@@ -374,6 +374,12 @@ public:
 	};
 
 	const k_internal Vector2 Zero;
+	const k_internal Vector2 One;
+	const k_internal Vector2 Up;
+	const k_internal Vector2 Down;
+	const k_internal Vector2 Left;
+	const k_internal Vector2 Right;
+
 
 	inline Vector2()
 	{
@@ -446,6 +452,13 @@ public:
 		return(Result);
 	}
 
+	inline const Vector2& operator-() const
+	{
+		Vector2 Result = { -this->X, -this->Y };
+
+		return(Result);
+	}
+
 	inline Vector2 operator+(Vector2 A)
 	{
 		Vector2 Result = {};
@@ -504,12 +517,16 @@ public:
 
 	inline bool32 operator <(Vector2 A)
 	{
-		return X < A.X && Y < A.Y;
+		bool32 Result = this->X < A.X || (this->X == A.X && this->Y < A.Y);
+
+		return (Result);
 	}
 
 	inline bool32 operator >(Vector2 A)
 	{
-		return X > A.X && Y > A.Y;
+		bool32 Result = this->X > A.X || (this->X == A.X && this->Y > A.Y);
+		
+		return (Result);
 	}
 
 	inline Vector2 operator/(real32 A)
@@ -629,6 +646,13 @@ public:
 		return (Result);
 	}
 
+	inline real32 Distance(const Vector2& A) const
+	{
+		real32 Result = Distance(*this, A);
+
+		return (Result);
+	}
+
 	inline k_internal Vector2 Min(Vector2 A, Vector2 B)
 	{
 		return A.Length() < B.Length() ? A : B;
@@ -691,6 +715,13 @@ public:
 
 	inline k_internal real32 Angle(Vector2 A, Vector2 B)
 	{
+		real32 DeltaY = B.Y - A.Y;
+		real32	DeltaX = B.X - A.X;
+
+		real32 AngleInDegrees = ATan2(DeltaY, DeltaX) * RADIANS_CONSTANT;
+
+		return AngleInDegrees;
+
 		return ATan2(B.Y, B.X) - ATan2(A.Y, A.X);
 
 		real32 Dot = DotProduct(A, B);						// # dot product
@@ -714,6 +745,11 @@ public:
 };
 
 const Vector2 Vector2::Zero = Vector2(0.0f, 0.0f);
+const Vector2 Vector2::One = Vector2(1.0f, 1.0f);
+const Vector2 Vector2::Up = Vector2(0.0f, -1.0f);
+const Vector2 Vector2::Down = Vector2(0.0f, 1.0f);
+const Vector2 Vector2::Left = Vector2(-1.0f, 0.0f);
+const Vector2 Vector2::Right = Vector2(1.0f, 0.0f);
 
 // Unique ID
 

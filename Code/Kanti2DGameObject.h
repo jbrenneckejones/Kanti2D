@@ -37,7 +37,11 @@ struct Collision
 	Collision(class Collider* CalledOnCollider, class Collider* IncomingCollider);
 
 	// Assumes that they're already confirmed colliding
-	k_internal inline void GetCollisionInfo(class Collider* Caller, class Collider* Collided, struct Collision& Info);
+	k_internal void GetCollisionInfo(class Collider* Caller, class Collider* Collided, struct Collision& Info);
+
+	k_internal void BoundingBoxEdgeCollision(class BoxCollider* Box, class EdgeCollider* Edge, struct Collision& Info);
+
+	k_internal void BoundingBoxCollision(BoxCollider* Box, BoxCollider* Edge, Collision& Info);
 };
 
 class Entity
@@ -141,7 +145,7 @@ public:
 	inline Transform()
 	{
 		Position = Vector2::Zero;
-		Scale = Vector2::Zero;
+		Scale = Vector2::One;
 		Rotation = Vector2::Zero;
 	}
 };
@@ -635,15 +639,15 @@ public:
 	{
 		if (GetBounds().Intersects(Collided->GetBounds()))
 		{
-			if (Collided->EntityAttachedTo->Name == "Player")
-			{
-				// __debugbreak();
-			}
-
 			for (auto Seg : GetSegments())
 			{
 				if (oriented_rectangle_segment_collide(Collided->GetBounds(), Seg))
 				{
+					if (Collided->EntityAttachedTo->Name == "Player")
+					{
+						printf("Colliding with player");
+					}
+
 					return TRUE;
 				}
 			}
@@ -766,7 +770,17 @@ public:
 
 	inline virtual BoundingBox GetBounds() override
 	{
-		Bounds.SetMinMax(GetMinPoint(), GetMaxPoint());
+		Vector2 PointMin = GetMinPoint();
+		Vector2 PointMax = GetMaxPoint();
+		Bounds.SetMinMax(PointMin, PointMax);
+
+		if (Bounds.Extents.X < 0.0f || Bounds.Extents.Y < 0.0f)
+		{
+			real32 TempY = PointMin.Y;
+			PointMin.Y = PointMax.Y;
+			PointMax.Y = TempY;
+			Bounds.SetMinMax(PointMin, PointMax);
+		}
 
 		return Bounds;
 	}
@@ -804,6 +818,15 @@ public:
 	inline void BlitSprite(SDL_Rect Source, SDL_Rect Destination);
 };
 
+struct AnimationData
+{
+	string AnimationName;
+
+	std::vector<SDL_Rect> AnimationsRects;
+	Vector2 Offsets;
+	std::vector<uint32> AnimationDurations;
+};
+
 // TODO(Julian): Maybe do a override call instead of inheritence
 class SpriteAnimator : public SpriteRenderer
 {
@@ -815,6 +838,7 @@ public:
 
 	std::map<string, std::vector<SDL_Rect> > Animations;
 	std::map<string, Vector2> Offsets;
+	std::map<string, std::vector<uint32>> AnimationDurations;
 
 	uint32 FrameIndex;
 	real64 TimeElapsed;
@@ -839,7 +863,7 @@ public:
 
 		// Renderer = new SpriteRenderer();
 
-		// GameEventSystem::EventSystem->AddUpdateHandler(this);
+		// GameEventSystem::EventSystem->AddDrawHandler(this);
 	}
 
 	inline void PlayAnimation(string Animation, bool32 PlayOnce = 0)
@@ -849,6 +873,7 @@ public:
 		if (CurrentAnim != Animation)
 		{
 			CurrentAnim = Animation;
+			TimeToUpdate = AnimationDurations[Animation][FrameIndex];
 			FrameIndex = 0;
 		}
 	}
@@ -861,7 +886,7 @@ public:
 			KRectangle DestinationRectangle =
 			{
 				EntityAttachedTo->EntTransform.Position + Offsets[CurrentAnim],
-				SpriteToRender.TextureRect.GetSize()
+				SpriteToRender.TextureRect.GetSize() * EntityAttachedTo->EntTransform.Scale
 			};
 
 			KRectangle SourceRectangle = { Animations[CurrentAnim][FrameIndex] };
@@ -872,7 +897,14 @@ public:
 		}
 	}
 
-	inline void AddAnimation(uint32 Frames, uint32 X, uint32 Y, string AnimationName, uint32 Width, uint32 Height, Vector2 Offset)
+	inline void AddAnimation(struct AnimationData Animation)
+	{
+		Animations.insert(std::pair<string, std::vector<SDL_Rect> >(Animation.AnimationName, Animation.AnimationsRects));
+		Offsets.insert(std::pair<string, Vector2>(Animation.AnimationName, Animation.Offsets));
+		AnimationDurations.insert(std::pair<string, std::vector<uint32>>(Animation.AnimationName, Animation.AnimationDurations));
+	}
+
+	inline void AddAnimation(uint32 Frames, uint32 X, uint32 Y, string AnimationName, uint32 Width, uint32 Height, Vector2 Offset, std::vector<uint32> Durations)
 	{
 		std::vector<SDL_Rect> Rectangles;
 
@@ -884,6 +916,7 @@ public:
 
 		Animations.insert(std::pair<string, std::vector<SDL_Rect> >(AnimationName, Rectangles));
 		Offsets.insert(std::pair<string, Vector2>(AnimationName, Offset));
+		AnimationDurations.insert(std::pair<string, std::vector<uint32>>(AnimationName, Durations));
 	}
 
 	inline virtual void AnimationDone(string CurrentAnimation)
@@ -953,8 +986,8 @@ public:
 
 	// Variables
 
-	real32 GravityRate = 5.0f;
-	real32 GravityMax = 10.0f;
+	real32 GravityRate = 70.0f;
+	real32 GravityMax = 200.0f;
 	real32 Friction = 0.5f;
 	real32 Mass = 1.0f;
 
@@ -977,113 +1010,101 @@ public:
 	{
 	}
 
-	inline void SlopeTest(const Collision& CollideInfo)
+	inline bool32 SlopeTest(const Collision& CollideInfo, Vector2& Average)
 	{
+		if (!IsGrounded)
+		{
+			return FALSE;
+		}
+
 		Transform* EntTransform = &EntityAttachedTo->EntTransform;
 
-		Vector2 Lowest = CollideInfo.Contacts[0].Point.Y;
-		int32 LowestIndex = 0;
+		BoundingBox Bounds = BodyCollider->GetBounds();
 
 		if (CollideInfo.Contacts.size() > 1)
 		{
+			Average = Vector2::Zero;
+
 			for (int32 Index = 0; Index < CollideInfo.Contacts.size(); ++Index)
 			{
-				if (Lowest.Y < CollideInfo.Contacts[Index].Point.Y)
-				{
-					Lowest = CollideInfo.Contacts[Index].Point;
-					LowestIndex = Index;
-				}
+				Average += CollideInfo.Contacts[Index].Point;
 			}
 		}
-
-		real32 Angle = Vector2::Angle(CollideInfo.Contacts[LowestIndex].Normal, EntTransform->Position) * RADIANS_CONSTANT;
-		// real32 Radians = ToRadians(Angle);
-
-		if (AbsoluteValue(Angle) < 30.0f)
+		else
 		{
-			EntTransform->Position.Y = Lowest.Y - BodyCollider->GetBounds().GetSize().Y;
+			Average = CollideInfo.Contacts[0].Point;
+		}
+
+		Average = Average / CollideInfo.Contacts.size();
+
+		real32 Angle = Vector2::Angle(Vector2::Up, -CollideInfo.Normal);
+		if (AbsoluteValue(Angle) < 45.0f)
+		{
+			return TRUE;
+		}
+
+		return FALSE;
+	}
+
+	inline virtual void MovePosition(Vector2 Position)
+	{
+		MovePosition(Position.X, Position.Y);
+	}
+
+	inline virtual void MovePosition(real32 X, real32 Y)
+	{
+		Transform* EntTransform = &EntityAttachedTo->EntTransform;
+
+		EntTransform->Position.X = Lerp(EntTransform->Position.X, Time::FixedUpdate, X);
+		EntTransform->Position.Y = Lerp(EntTransform->Position.Y, Time::FixedUpdate, Y - BodyCollider->GetBounds().GetSize().Y);
+	}
+
+	inline virtual void MovementDetection(const Collision& CollideInfo)
+	{
+		Transform* EntTransform = &EntityAttachedTo->EntTransform;
+
+		if (CollideInfo.Normal.Y > 0.0f)
+		{
+			IsGrounded = TRUE;
+			Ground = CollideInfo.Collider;
+			Velocity.Y = 0.0f;
+		}
+		else if (CollideInfo.Normal.Y < 0.0f)
+		{
+			Velocity.Y = 0.0f;
+			Acceleration.Y = 0.0f;
+			EntTransform->Position.Y -= SignOf(CollideInfo.Normal.Y);
+		}
+
+		if (AbsoluteValue(CollideInfo.Normal.X) > 0.0f)
+		{
+			Vector2 Average;
+			if (SlopeTest(CollideInfo, Average))
+			{
+				// Velocity.Y = 0.0f;
+				MovePosition(EntTransform->Position.X, Average.Y);
+				// EntTransform->Position.Y -= BodyCollider->GetBounds().GetSize().Y;
+			}
+			else
+			{
+				if (AbsoluteValue(Velocity.X) > 0.0f)
+				{
+					Velocity.X = 0.0f;
+					// Velocity.Y = 0.0f;
+					EntTransform->Position.X -= SignOf(CollideInfo.Normal.X);
+				}
+			}
 		}
 	}
 
 	inline virtual void OnCollisionStart(const Collision& CollideInfo) override
 	{
-		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
-
-		if (CollideInfo.Normal.Y > 0.0f)
-		{
-			IsGrounded = TRUE;
-			Ground = CollideInfo.Collider;
-			Velocity.Y = 0.0f;
-
-			
-		}
-		else if (CollideInfo.Normal.Y < 0.0f)
-		{
-			Velocity.Y = 0.0f;
-		}
-		else
-		{
-		}
-
-		if (CollideInfo.Normal.X > 0.0f)
-		{
-			if (Velocity.X > 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X -= 1.0f;
-			}
-		}
-		else if (CollideInfo.Normal.X < 0.0f)
-		{
-			if (Velocity.X < 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X += 1.0f;
-			}
-		}
+		MovementDetection(CollideInfo);
 	}
 
 	inline virtual void OnCollisionStay(const Collision& CollideInfo) override
 	{
-		Transform* EntTransform = &EntityAttachedTo->EntTransform;
-
-		// TODO(Julian): Test this
-		SlopeTest(CollideInfo);
-
-		if (CollideInfo.Normal.Y > 0.0f)
-		{
-			IsGrounded = TRUE;
-			Ground = CollideInfo.Collider;
-
-			Velocity.Y = 0.0f;
-		}
-		else if (CollideInfo.Normal.Y < 0.0f)
-		{
-			Velocity.Y = 0.0f;
-		}
-		else
-		{
-		}
-
-		if (CollideInfo.Normal.X > 0.0f)
-		{
-			if (Velocity.X > 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X -= 1.0f;
-			}
-		}
-		else if (CollideInfo.Normal.X < 0.0f)
-		{
-			if (Velocity.X < 0.0f)
-			{
-				Velocity.X = 0.0f;
-				EntTransform->Position.X += 1.0f;
-			}
-		}
+		MovementDetection(CollideInfo);
 	}
 
 	inline virtual void OnCollisionEnd(const Collision& CollideInfo) override
@@ -1093,26 +1114,32 @@ public:
 			Ground = nullptr;
 			IsGrounded = FALSE;
 		}
+
+		if (CollideInfo.Normal.Y < 0.0f)
+		{
+			Velocity.Y = 0.0f;
+			Acceleration.Y = 0.0f;
+		}
 	}
 
 	inline void AddFriction()
 	{
 		if (!IsGrounded)
 		{
-			if (Velocity.Y > GravityMax)
+			if (Acceleration.Y > GravityMax)
 			{
-				Velocity.Y = GravityMax;
+				Acceleration.Y = GravityMax;
 			}
 			else
 			{
-				Velocity.Y += GravityRate;
+				Acceleration.Y += GravityRate;
 			}
 		}
 		else
 		{
-			if (Velocity.Y > 0.0f)
+			if (Acceleration.Y > 0.0f)
 			{
-				Velocity.Y = 0.0f;
+				Acceleration.Y = 0.0f;
 			}
 		}
 
@@ -1122,14 +1149,7 @@ public:
 		}
 		else
 		{
-			if (Velocity.X > 0.0f)
-			{
-				Velocity.X -= Friction;
-			}
-			else if (Velocity.X < -0.0f)
-			{
-				Velocity.X += Friction;
-			}
+			Velocity -= -Velocity * Friction;
 		}
 
 		Velocity.X = SignOf(Velocity.X) * Clamp(0.0f, AbsoluteValue(Velocity.X), MaxVelocity.X);
@@ -1140,11 +1160,31 @@ public:
 	{
 	}
 
+	inline void VerletVelocityMethod()
+	{
+		// Acceleration = force(Time::TimeSinceStartup, EntityAttachedTo->EntTransform.Position) / Mass;
+		// EntityAttachedTo->EntTransform.Position += Time::FixedUpdate * (Velocity + Time::FixedUpdate * Acceleration / 2);
+		// Vector2 NewAcceleration = force(Time::TimeSinceStartup, EntityAttachedTo->EntTransform.Position) / Mass;
+		// Velocity += Time::FixedUpdate * (Acceleration + NewAcceleration) / 2;
+	}
+
 	inline void FixedUpdate() override
 	{
-		AddFriction();
+		// AddFriction();
+		if (!IsGrounded)
+		{
+			if (Acceleration.Y > GravityMax)
+			{
+				Acceleration.Y = GravityMax;
+			}
+			else
+			{
+				Acceleration.Y += GravityRate * Time::FixedUpdate;
+			}
+		}
 
-		EntityAttachedTo->EntTransform.Position += Velocity * (real32)Time::FixedUpdate;
+		EntityAttachedTo->EntTransform.Position += Velocity * Time::FixedUpdate;
+		Velocity += (Acceleration - (Velocity * Friction)) * Time::FixedUpdate;
 
 		// Position.X += Velocity.X * (real32)Time::DeltaTime;
 
@@ -1195,7 +1235,7 @@ public:
 	DIRECTION CurrentDirection;
 
 	real32 Speed = 5.0f;
-	real32 JumpAmount = 75.0f;
+	real32 JumpAmount = 500.0f;
 
 public:
 
@@ -1228,11 +1268,11 @@ public:
 		// "../Data/Images/MyChar.bmp", SDL_Rect{ 0, 0, 32, 32 }, ObjectPosition, 300
 		// GameObject->Components.push_back(Animator);
 
-		Animator->AddAnimation(1, 0, 0, "IdleLeft", 32, 32, Vector2(0, 0));
-		Animator->AddAnimation(1, 0, 32, "IdleRight", 32, 32, Vector2(0, 0));
+		Animator->AddAnimation(1, 0, 0, "IdleLeft", 32, 32, Vector2(0, 0), { 100, 100 });
+		Animator->AddAnimation(1, 0, 32, "IdleRight", 32, 32, Vector2(0, 0), { 100, 100 });
 
-		Animator->AddAnimation(3, 0, 0, "RunLeft", 32, 32, Vector2(0, 0));
-		Animator->AddAnimation(3, 0, 32, "RunRight", 32, 32, Vector2(0, 0));
+		Animator->AddAnimation(3, 0, 0, "RunLeft", 32, 32, Vector2(0, 0), { 100, 100 });
+		Animator->AddAnimation(3, 0, 32, "RunRight", 32, 32, Vector2(0, 0), { 100, 100 });
 
 		Animator->PlayAnimation("RunRight");
 
@@ -1256,12 +1296,12 @@ public:
 		{
 		case DIRECTION::LEFT:
 			// GameObject.EntTransform.Position.X = -Speed;
-			RigidBody->Velocity.X = -Speed;
+			RigidBody->Acceleration.X = -Speed;
 			Animator->PlayAnimation("RunLeft");
 			break;
 		case DIRECTION::RIGHT:
 			// Velocity.X = Speed;
-			RigidBody->Velocity.X = Speed;
+			RigidBody->Acceleration.X = Speed;
 			Animator->PlayAnimation("RunRight");
 			break;
 
@@ -1274,6 +1314,8 @@ public:
 	{
 		// AnimatedSprite* AnimSprite = (AnimatedSprite *)ObjectSprite;
 		// RigidBody->Velocity.X = 0.0f;
+		RigidBody->Acceleration.X = 0.0f;
+
 		switch (CurrentDirection)
 		{
 		case DIRECTION::LEFT:
@@ -1290,8 +1332,13 @@ public:
 
 	inline void Jump()
 	{
-		RigidBody->Velocity.Y -= JumpAmount;
+		RigidBody->Acceleration.Y = -JumpAmount;
 		RigidBody->IsGrounded = FALSE;
+	}
+
+	inline void EndJump()
+	{
+		RigidBody->Acceleration.Y = 0.0f;
 	}
 
 	virtual void OnCollisionStart(const Collision& Collide) override
@@ -1334,6 +1381,32 @@ public:
 	}
 };
 
+class AnimatedTile : public Tile
+{
+public:
+
+public:
+
+
+	inline AnimatedTile(SDL_Texture* TileSetTexture, Vector2 TilePosition, Vector2 TileSetPosition, Vector2 TileSetSize, struct AnimationData Animation)
+	{
+		Name = "Tile";
+		TileSet = TileSetTexture;
+
+		EntityAttachedTo = new GameEntity("AnimatedTile");
+		EntityAttachedTo->EntTransform.Position = TilePosition;
+		EntityAttachedTo->EntTransform.Scale = Vector2(1.0f, 1.0f);
+
+		EntRenderer = EntityAttachedTo->AddComponent<SpriteAnimator>();
+		SpriteAnimator* Animator = (SpriteAnimator *)EntRenderer;
+
+		Animator->AddAnimation(Animation);
+		Animator->PlayAnimation(Animation.AnimationName);
+		EntRenderer->SpriteToRender.SpriteSheet = TileSetTexture;
+		EntRenderer->SpriteToRender.TextureRect = KRectangle(TileSetPosition, TileSetSize);
+	}
+};
+
 class PhysicsTile : public Tile
 {
 public:
@@ -1370,16 +1443,66 @@ struct Tileset
 {
 	SDL_Texture* Texture;
 	int32 FirstGID;
+	int32 TileCount;
+
+	uint32 TileWidth;
+	uint32 TileHeight;
+
+	uint32 TileColumns;
+
+	uint32 TextureWidth;
+	uint32 TextureHeight;
+
+	std::map<uint32, AnimationData> Animations;
 
 	Tileset()
 	{
 		FirstGID = -1;
 	}
 
-	Tileset(SDL_Texture* TileSetTexture, int32 TilesetFirstGID)
+	Tileset(SDL_Texture* TileSetTexture, int32 TilesetFirstGID, int32 MaxTileCount,
+		int32 TileSetWidth, int32 TileSetHeight, int32 TileSetColumns, int32 TileSetTextureWidth, int32 TileSetTextureHeight)
+	{
+		SetTileSet(TileSetTexture, TilesetFirstGID, MaxTileCount, TileSetWidth,
+			TileSetHeight, TileSetColumns, TileSetTextureWidth, TileSetTextureHeight);
+	}
+
+	inline void SetTileSet(SDL_Texture* TileSetTexture, int32 TilesetFirstGID, int32 MaxTileCount,
+		int32 TileSetWidth, int32 TileSetHeight, int32 TileSetColumns, int32 TileSetTextureWidth, int32 TileSetTextureHeight)
 	{
 		Texture = TileSetTexture;
 		FirstGID = TilesetFirstGID;
+		TileCount = MaxTileCount;
+		TileWidth = TileSetWidth;
+		TileHeight = TileSetHeight;
+		TileColumns = TileSetColumns;
+		TextureWidth = TileSetTextureWidth;
+		TextureHeight = TileSetTextureHeight;
+	}
+
+	inline void AddAnimation(uint32 GID_ID, uint32 Duration, uint32 TileID)
+	{
+		Animations[GID_ID].AnimationName = std::to_string(GID_ID);
+		Animations[GID_ID].AnimationDurations.push_back(Duration);
+
+		// uint32 TSXX = (TileID + FirstGID) % (TextureWidth / (int32)TileWidth) - 1;
+		uint32 TSXX = TileID % TileColumns;
+		TSXX *= TileWidth;
+
+		uint32 TSYY = 0;
+		// uint32 Amount = (((TileID + FirstGID) - FirstGID) / (TextureWidth / TileWidth));
+		uint32 Amount = TileID / TileColumns;
+
+		TSYY = TileHeight * Amount;
+
+		Vector2 FinalTileSetPosition = Vector2(TSXX, TSYY);
+
+		Vector2 TileSetSize = Vector2(TileWidth, TileHeight);
+
+		KRectangle TextureRect = { FinalTileSetPosition, TileSetSize };
+
+		Animations[GID_ID].AnimationsRects.push_back(TextureRect.ToSDLRect());
+		// Animation.Offsets[AnimationName] = Offset;
 	}
 };
 
@@ -1393,7 +1516,7 @@ public:
 	Vector2 SpawnPoint;
 
 	Vector2 LevelSize;
-	Vector2 TileSize;
+	Vector2 LevelTileSize;
 
 	SDL_Texture* BackgroundTexture;
 

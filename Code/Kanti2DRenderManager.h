@@ -40,14 +40,40 @@ public:
 		SDL_SetWindowTitle(Window, WindowName.c_str());
 	}
 
-	inline SDL_Surface* LoadImage(const string &FileName)
+	inline void SaveImage(const string& Name, const string& FileName)
 	{
-		if (SpriteSheets.count(FileName) == 0)
+		if (SpriteSheets.count(Name) == 0)
 		{
-			SpriteSheets[FileName] = IMG_Load(FileName.c_str());
+			SpriteSheets[Name] = IMG_Load(FileName.c_str());
+		}
+	}
+
+	inline SDL_Surface* LoadImageFile(const string& FileName)
+	{
+		string Name;
+		uint32 SlashIndex = FileName.find_last_of('/');
+		if (SlashIndex != FileName.size())
+		{
+			Name = FileName.substr(SlashIndex + 1);
 		}
 
-		return SpriteSheets[FileName];
+		uint32 DotIndex = Name.find_last_of('.');
+		if (DotIndex != Name.size())
+		{
+			Name = Name.substr(0, DotIndex);
+		}
+
+		if (SpriteSheets.count(Name) == 0)
+		{
+			SpriteSheets[Name] = IMG_Load(FileName.c_str());
+		}
+
+		return SpriteSheets[Name];
+	}
+
+	inline SDL_Surface* LoadImage(const string& Name)
+	{
+		return SpriteSheets[Name];
 	}
 
 	inline void BlitSurface(SDL_Texture* Texture, SDL_Rect* SourceRect, SDL_Rect* DestinationRect)

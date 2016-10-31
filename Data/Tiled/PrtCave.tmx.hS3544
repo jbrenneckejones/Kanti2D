@@ -6,12 +6,18 @@
  <tileset firstgid="81" name="NPCSym" tilewidth="32" tileheight="32" tilecount="300" columns="20">
   <image source="../Images/Npc/NpcSym.bmp" trans="000000" width="640" height="480"/>
   <tile id="18">
+   <properties>
+    <property name="AnimationName" value="HealthRestore"/>
+   </properties>
    <animation>
     <frame tileid="18" duration="100"/>
     <frame tileid="19" duration="100"/>
    </animation>
   </tile>
   <tile id="26">
+   <properties>
+    <property name="AnimationName" value="FileSave"/>
+   </properties>
    <animation>
     <frame tileid="26" duration="100"/>
     <frame tileid="27" duration="100"/>
